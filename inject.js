@@ -1,89 +1,5 @@
 (function() {
-    console.log("101围棋助手: 内鬼脚本 v5.0 (数据结构修正版) 已注入...");
-
-    // ==========================================
-    // 基础工具：SGF 手动组装（从 prepos 构建初始棋盘）
-    // ==========================================
-    function constructInitialSGF(data) {
-        if (!data) return "";
-        let sgfHead = "(;GM[1]FF[4]CA[UTF-8]AP[101Helper]SZ[19]";
-        
-        if (typeof data.blackfirst !== 'undefined') {
-            sgfHead += data.blackfirst ? "PL[B]" : "PL[W]";
-        }
-
-        if (Array.isArray(data.prepos)) {
-            if (data.prepos[0] && data.prepos[0].length > 0) {
-                sgfHead += "AB";
-                data.prepos[0].forEach(p => sgfHead += "[" + p + "]");
-            }
-            if (data.prepos[1] && data.prepos[1].length > 0) {
-                sgfHead += "AW";
-                data.prepos[1].forEach(p => sgfHead += "[" + p + "]");
-            }
-        }
-        sgfHead += ")";
-        return sgfHead;
-    }
-
-    // ==========================================
-    // 尝试从 Alpine.store('qipan') 读取完整棋盘
-    // Alpine 解码了 qqdata.c 字段，包含全部棋子
-    // ==========================================
-    function readBoardFromAlpine(qqdata) {
-        try {
-            // Alpine v3 访问全局 store
-            if (typeof Alpine === 'undefined') return null;
-            const store = Alpine.store('qipan');
-            if (!store) return null;
-
-            // 101weiqi 的 qipan store 把解析好的棋局存在某个结构里
-            // 尝试直接访问 store.qqdata（Alpine 中的 qqdata 可能已含完整 prepos）
-            if (store.qqdata && store.qqdata.prepos) {
-                const alpinePrepos = store.qqdata.prepos;
-                const origPrepos = qqdata.prepos;
-                const alpineBlack = alpinePrepos[0] || [];
-                const alpineWhite = alpinePrepos[1] || [];
-                const origBlack = origPrepos ? (origPrepos[0] || []) : [];
-                const origWhite = origPrepos ? (origPrepos[1] || []) : [];
-                
-                if (alpineBlack.length > origBlack.length || alpineWhite.length > origWhite.length) {
-                    return store.qqdata;
-                }
-            }
-
-            // 尝试直接找 board 数组（二维数组，可能是 1=黑,2=白）
-            if (store.board && Array.isArray(store.board)) {
-                return { _alpineBoard: store.board, _source: 'board' };
-            }
-
-        } catch(e) {
-            console.log("Alpine store 读取失败:", e.message);
-        }
-        return null;
-    }
-
-    // 从二维 board 数组还原 SGF prepos 数据
-    function boardArrayToSGF(boardArr, blackfirst) {
-        const colLetters = 'abcdefghijklmnopqrs';
-        const blacks = [], whites = [];
-        for (let row = 0; row < boardArr.length; row++) {
-            const cols = boardArr[row];
-            if (!Array.isArray(cols)) continue;
-            for (let col = 0; col < cols.length; col++) {
-                const val = cols[col];
-                const coord = colLetters[col] + colLetters[row];
-                if (val === 1 || val === 'B' || val === 'b') blacks.push(coord);
-                else if (val === 2 || val === 'W' || val === 'w') whites.push(coord);
-            }
-        }
-        let sgf = "(;GM[1]FF[4]CA[UTF-8]AP[101Helper]SZ[19]";
-        if (typeof blackfirst !== 'undefined') sgf += blackfirst ? "PL[B]" : "PL[W]";
-        if (blacks.length > 0) sgf += "AB" + blacks.map(c => "[" + c + "]").join('');
-        if (whites.length > 0) sgf += "AW" + whites.map(c => "[" + c + "]").join('');
-        sgf += ")";
-        return sgf;
-    }
+    console.log("101围棋助手 v6.0 已注入...");
 
     function normalizeResult(raw) {
         if (raw === 1 || raw === '1') return 1;
@@ -105,14 +21,18 @@
         return null;
     }
 
-    function readAnswerResultFromStore(val) {
-        // 收集所有来源的结果，优先返回 1 或 2，最后才考虑 0
+    function readAnswerResultFromStore(val, problemId) {
         let fallbackZero = null;
+        const tag = '[Q-' + (problemId || '?') + ']';
+
+        // 切题后 2.5 秒内 duizhanResult 还是上一题的脏值，跳过它
+        const skipDuizhan = window._newProblemAt && (Date.now() - window._newProblemAt < 2500);
+        if (skipDuizhan) console.log(tag + ' [Grace期] 跳过 duizhanResult，剩余', Math.round(2500 - (Date.now() - window._newProblemAt)) + 'ms');
 
         const check = (raw) => {
             const n = normalizeResult(raw);
-            if (n === 1 || n === 2) return n;   // 明确结果，直接采用
-            if (n === 0) fallbackZero = 0;       // 记录"未作答"，但继续找
+            if (n === 1 || n === 2) return n;
+            if (n === 0) fallbackZero = 0;
             return null;
         };
 
@@ -120,33 +40,42 @@
             if (typeof Alpine !== 'undefined') {
                 const store = Alpine.store('qipan');
                 if (store) {
+                    const dump = {
+                        duizhanResult:    store.duizhanResult,
+                        'taskinfo.result': store.taskinfo ? store.taskinfo.result : '(无taskinfo)',
+                        answerResult:     store.answerResult,
+                        'qqdata.myan.result': (store.qqdata && store.qqdata.myan) ? store.qqdata.myan.result : '(无myan)',
+                    };
+                    console.log(tag + ' Alpine store 快照:', dump);
+
                     let r;
-                    if (typeof store.duizhanResult !== 'undefined') {
+                    if (!skipDuizhan && typeof store.duizhanResult !== 'undefined') {
                         r = check(store.duizhanResult);
-                        if (r !== null) return r;
+                        if (r !== null) { console.log(tag + ' 结果来源: duizhanResult =', store.duizhanResult); return r; }
                     }
                     if (store.taskinfo && typeof store.taskinfo.result !== 'undefined') {
                         r = check(store.taskinfo.result);
-                        if (r !== null) return r;
+                        if (r !== null) { console.log(tag + ' 结果来源: taskinfo.result =', store.taskinfo.result); return r; }
                     }
                     if (typeof store.answerResult !== 'undefined') {
                         r = check(store.answerResult);
-                        if (r !== null) return r;
+                        if (r !== null) { console.log(tag + ' 结果来源: answerResult =', store.answerResult); return r; }
                     }
                     if (store.qqdata && store.qqdata.myan && typeof store.qqdata.myan.result !== 'undefined') {
                         r = check(store.qqdata.myan.result);
-                        if (r !== null) return r;
+                        if (r !== null) { console.log(tag + ' 结果来源: store.qqdata.myan.result =', store.qqdata.myan.result); return r; }
                     }
                 }
             }
-        } catch(e) {}
+        } catch(e) { console.log('readAnswerResultFromStore 异常:', e.message); }
 
         if (val && val.myan && typeof val.myan.result !== 'undefined') {
             const r = check(val.myan.result);
-            if (r !== null) return r;
+            if (r !== null) { console.log(tag + ' 结果来源: val.myan.result =', val.myan.result); return r; }
         }
 
-        return fallbackZero; // 所有来源都没有 1/2，才返回 0 或 null
+        console.log(tag + ' 所有来源均无明确结果，fallbackZero =', fallbackZero);
+        return fallbackZero;
     }
 
     // ==========================================
@@ -160,44 +89,43 @@
             let val = window[name];
             
             if (val && (val.prepos || val.answers || val.sgf)) {
-                // 尝试从 Alpine store 获取最新的题目 ID 和数据，解决无刷新下一题的问题
+                // 尝试从 Alpine store 获取最新的题目 ID 和数据
                 let currentProblemId = val.publicid || val.id || 'unknown';
                 try {
                     if (typeof Alpine !== 'undefined') {
                         const store = Alpine.store('qipan');
                         if (store && store.qqdata) {
-                            val = store.qqdata; // 使用 Alpine 中最新的数据
+                            val = store.qqdata;
                             currentProblemId = val.publicid || val.id || currentProblemId;
                         }
                     }
                 } catch(e) {}
 
-                // 获取答题结果：优先状态字段，其次结果面板
-                let answerResult = readAnswerResultFromStore(val);
+                const isNewProblem = (window._lastProblemId !== currentProblemId && window._lastProblemId !== undefined);
+                console.log(
+                    '%c[SCAN] Q=' + currentProblemId +
+                    ' | 上次Q=' + window._lastProblemId +
+                    ' | isNewProblem=' + isNewProblem +
+                    ' | 上次结果=' + window._lastSentAnswerResult,
+                    'color: #2563eb'
+                );
 
-                if (answerResult === null) {
-                    const panelResult = detectResultFromResultPanel();
-                    if (panelResult !== null) {
-                        answerResult = panelResult;
-                    }
-                }
-
-                // 第一步：尝试从 Alpine store 读取完整棋盘
-                let initialSGF = "";
-                const alpineData = readBoardFromAlpine(val);
-                
-                if (alpineData && alpineData._alpineBoard) {
-                    // Alpine 返回了二维数组形式的棋盘
-                    initialSGF = boardArrayToSGF(alpineData._alpineBoard, val.blackfirst);
-                } else if (alpineData && alpineData.prepos) {
-                    // Alpine store 里的 prepos 比 qqdata 原始的更完整
-                    initialSGF = constructInitialSGF(alpineData);
+                let answerResult;
+                if (isNewProblem) {
+                    window._newProblemAt = Date.now(); // 记录切题时刻，用于 Grace 期
+                    const myanResult = (val.myan && typeof val.myan.result !== 'undefined') ? val.myan.result : '(无myan)';
+                    console.log('[SCAN] 新题 → 只看 val.myan.result =', myanResult);
+                    answerResult = (val.myan && typeof val.myan.result !== 'undefined') ? normalizeResult(val.myan.result) : null;
+                    if (answerResult === null) answerResult = 0;
+                    console.log('[SCAN] 新题最终 answerResult =', answerResult);
                 } else {
-                    // 退路：用 qqdata 原始 prepos（可能不完整）
-                    if (val.sgf && typeof val.sgf === 'string' && val.sgf.includes('AB[')) {
-                        initialSGF = val.sgf;
-                    } else {
-                        initialSGF = constructInitialSGF(val);
+                    answerResult = readAnswerResultFromStore(val, currentProblemId);
+                    if (answerResult === null) {
+                        const panelResult = detectResultFromResultPanel();
+                        if (panelResult !== null) {
+                            console.log('[SCAN] 面板图标补充结果:', panelResult);
+                            answerResult = panelResult;
+                        }
                     }
                 }
 
@@ -227,12 +155,9 @@
                     window.postMessage({
                         type: "101_GAME_DATA",
                         source: "GLOBAL_" + name,
-                        data: plainVal, 
-                        answerResult: answerResult, // 1=正确, 2=错误
-                        isNewResult: isNewResult,   // 是否是刚刚发生的状态变化
-                        extra: { 
-                            initialSGF: initialSGF
-                        }
+                        data: plainVal,
+                        answerResult: answerResult,
+                        isNewResult: isNewResult
                     }, "*");
                 }
                 
@@ -320,12 +245,12 @@
             if (this.responseText && (this.responseText.includes('prepos') || this.responseText.includes('answers'))) {
                 try {
                     const data = JSON.parse(this.responseText);
-                    const computedSGF = constructInitialSGF(data);
-                    window.postMessage({ 
-                        type: "101_GAME_DATA", 
-                        source: "XHR", 
-                        data: data, 
-                        extra: { initialSGF: computedSGF } 
+                    window.postMessage({
+                        type: "101_GAME_DATA",
+                        source: "XHR",
+                        data: data,
+                        answerResult: null,
+                        isNewResult: false
                     }, "*");
                 } catch(e) {}
             }
