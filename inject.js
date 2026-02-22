@@ -26,8 +26,8 @@
         const tag = '[Q-' + (problemId || '?') + ']';
 
         // 切题后 2.5 秒内 duizhanResult 还是上一题的脏值，跳过它
-        const skipDuizhan = window._newProblemAt && (Date.now() - window._newProblemAt < 2500);
-        if (skipDuizhan) console.log(tag + ' [Grace期] 跳过 duizhanResult，剩余', Math.round(2500 - (Date.now() - window._newProblemAt)) + 'ms');
+        const skipDuizhan = window._newProblemAt && (Date.now() - window._newProblemAt < 1500);
+        if (skipDuizhan) console.log(tag + ' [Grace期] 跳过 duizhanResult，剩余', Math.round(1500 - (Date.now() - window._newProblemAt)) + 'ms');
 
         const check = (raw) => {
             const n = normalizeResult(raw);
@@ -44,11 +44,38 @@
                         duizhanResult:    store.duizhanResult,
                         'taskinfo.result': store.taskinfo ? store.taskinfo.result : '(无taskinfo)',
                         answerResult:     store.answerResult,
+                        'simulatorDuizhanPts.length': Array.isArray(store.simulatorDuizhanPts) ? store.simulatorDuizhanPts.length : '(无数组)',
+                        musthideFirstMoveDone: !!store.musthideFirstMoveDone,
                         'qqdata.myan.result': (store.qqdata && store.qqdata.myan) ? store.qqdata.myan.result : '(无myan)',
                     };
                     console.log(tag + ' Alpine store 快照:', dump);
 
+                    const currentPtsLength = Array.isArray(store.simulatorDuizhanPts) ? store.simulatorDuizhanPts.length : 0;
+                    const initialPtsLength = Number.isFinite(window._initialPtsLength) ? window._initialPtsLength : 0;
+                    const hasMoveSignal = !!store.musthideFirstMoveDone || currentPtsLength > initialPtsLength;
+
                     let r;
+                    // 【状态机锁】：浏览模式下切题后，等待“首手动作”信号再解锁，避免沿用上一题的脏结果
+                    if (window._problemState === 'PENDING') {
+                        if (hasMoveSignal) {
+                            console.log(tag + ' 观察到首手动作信号，解除 PENDING 锁', {
+                                currentPtsLength,
+                                initialPtsLength,
+                                musthideFirstMoveDone: !!store.musthideFirstMoveDone
+                            });
+                            window._problemState = 'READY';
+                        } else {
+                            console.log(tag + ' 处于 PENDING 锁（等待首手动作），忽略结果值:', {
+                                duizhanResult: store.duizhanResult,
+                                currentPtsLength,
+                                initialPtsLength,
+                                musthideFirstMoveDone: !!store.musthideFirstMoveDone
+                            });
+                            fallbackZero = 0;
+                            return 0;
+                        }
+                    }
+
                     if (!skipDuizhan && typeof store.duizhanResult !== 'undefined') {
                         r = check(store.duizhanResult);
                         if (r !== null) { console.log(tag + ' 结果来源: duizhanResult =', store.duizhanResult); return r; }
@@ -61,18 +88,12 @@
                         r = check(store.answerResult);
                         if (r !== null) { console.log(tag + ' 结果来源: answerResult =', store.answerResult); return r; }
                     }
-                    if (store.qqdata && store.qqdata.myan && typeof store.qqdata.myan.result !== 'undefined') {
-                        r = check(store.qqdata.myan.result);
-                        if (r !== null) { console.log(tag + ' 结果来源: store.qqdata.myan.result =', store.qqdata.myan.result); return r; }
-                    }
+                    // 【修改】：移除了对 store.qqdata.myan.result 的读取，因为它包含的是历史记录，会导致刷新后直接显示已作答
                 }
             }
         } catch(e) { console.log('readAnswerResultFromStore 异常:', e.message); }
 
-        if (val && val.myan && typeof val.myan.result !== 'undefined') {
-            const r = check(val.myan.result);
-            if (r !== null) { console.log(tag + ' 结果来源: val.myan.result =', val.myan.result); return r; }
-        }
+        // 【修改】：移除了对 val.myan.result 的读取，原因同上
 
         console.log(tag + ' 所有来源均无明确结果，fallbackZero =', fallbackZero);
         return fallbackZero;
@@ -101,40 +122,48 @@
                     }
                 } catch(e) {}
 
-                const isNewProblem = (window._lastProblemId !== currentProblemId && window._lastProblemId !== undefined);
+                const isFirstLoad = (window._lastProblemId === undefined);
+                const isNewProblem = (window._lastProblemId !== currentProblemId && !isFirstLoad);
                 console.log(
                     '%c[SCAN] Q=' + currentProblemId +
                     ' | 上次Q=' + window._lastProblemId +
                     ' | isNewProblem=' + isNewProblem +
+                    ' | isFirstLoad=' + isFirstLoad +
                     ' | 上次结果=' + window._lastSentAnswerResult,
                     'color: #2563eb'
                 );
 
                 let answerResult;
-                if (isNewProblem) {
-                    window._newProblemAt = Date.now(); // 记录切题时刻，用于 Grace 期
-                    const myanResult = (val.myan && typeof val.myan.result !== 'undefined') ? val.myan.result : '(无myan)';
-                    console.log('[SCAN] 新题 → 只看 val.myan.result =', myanResult);
-                    answerResult = (val.myan && typeof val.myan.result !== 'undefined') ? normalizeResult(val.myan.result) : null;
-                    if (answerResult === null) answerResult = 0;
-                    console.log('[SCAN] 新题最终 answerResult =', answerResult);
+                if (isNewProblem || isFirstLoad) {
+                    if (isNewProblem) window._newProblemAt = Date.now(); // 记录切题时刻，用于 Grace 期
+                    window._problemResultCache = {}; // 切题或刷新时清空缓存
+                    window._problemState = 'PENDING'; // 【状态机】：切题后进入 PENDING 锁状态，必须看到首手动作才解锁
+                    window._initialPtsLength = 0;
+                    try {
+                        if (typeof Alpine !== 'undefined') {
+                            const store = Alpine.store('qipan');
+                            if (store && Array.isArray(store.simulatorDuizhanPts)) {
+                                window._initialPtsLength = store.simulatorDuizhanPts.length;
+                            }
+                        }
+                    } catch (e) {}
+                    // 【修改】：切题或刷新时，强制重置为未作答(0)，忽略网站自带的历史记录(val.myan.result)
+                    console.log('[SCAN] 新题/刷新 → 强制重置状态为未作答(0)，进入 PENDING 锁，初始步数=' + window._initialPtsLength);
+                    answerResult = 0;
                 } else {
                     answerResult = readAnswerResultFromStore(val, currentProblemId);
-                    if (answerResult === null) {
-                        const panelResult = detectResultFromResultPanel();
-                        if (panelResult !== null) {
-                            console.log('[SCAN] 面板图标补充结果:', panelResult);
-                            answerResult = panelResult;
-                        }
-                    }
                 }
 
                 // 缓存答题结果：一旦检测到 1 或 2，就记住它，防止提示语消失后状态回退
+                // 【新增逻辑】：只记录第一次的结果，后续无论怎么点都不覆盖
                 if (!window._problemResultCache) window._problemResultCache = {};
-                if (answerResult === 1 || answerResult === 2) {
-                    window._problemResultCache[currentProblemId] = answerResult;
-                } else if (window._problemResultCache[currentProblemId]) {
+                
+                if (window._problemResultCache[currentProblemId]) {
+                    // 如果这道题已经有结果了，强制锁定为第一次的结果
                     answerResult = window._problemResultCache[currentProblemId];
+                } else if (answerResult === 1 || answerResult === 2) {
+                    // 第一次检测到 1 或 2，存入缓存
+                    window._problemResultCache[currentProblemId] = answerResult;
                 }
 
                 if (window._lastSentAnswerResult !== answerResult || window._lastProblemId !== currentProblemId || !window._hasSentData) {

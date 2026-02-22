@@ -125,7 +125,7 @@ function initDB() {
     });
 }
 
-async function saveErrorProblem(problemData) {
+async function saveProblemHistory(problemData, isCorrect = false) {
     if (!problemData || !problemData.publicid) return;
     
     try {
@@ -140,29 +140,50 @@ async function saveErrorProblem(problemData) {
         getReq.onsuccess = () => {
             let record = getReq.result;
             if (record) {
-                // 更新错误次数和时间
-                record.errorCount = (record.errorCount || 1) + 1;
+                // 更新次数和时间
+                if (isCorrect) {
+                    record.correctCount = (record.correctCount || 0) + 1;
+                } else {
+                    record.errorCount = (record.errorCount || 0) + 1;
+                }
                 record.timestamp = Date.now();
                 store.put(record);
-                console.log(`【错题本】更新错题 Q-${qid}，错误次数: ${record.errorCount}`);
+                console.log(`【历史记录】更新 Q-${qid}，对:${record.correctCount || 0} 错:${record.errorCount || 0}`);
             } else {
-                // 新增错题记录
+                // 新增记录
                 record = {
                     qid: qid,
                     title: problemData.title || '',
                     desc: problemData.desc || '',
                     levelname: problemData.levelname || '',
                     qtypename: problemData.qtypename || '',
-                    errorCount: 1,
+                    errorCount: isCorrect ? 0 : 1,
+                    correctCount: isCorrect ? 1 : 0,
                     timestamp: Date.now(),
                     url: window.location.href
                 };
                 store.add(record);
-                console.log(`【错题本】新增错题 Q-${qid}`);
+                console.log(`【历史记录】新增 Q-${qid}，对:${record.correctCount} 错:${record.errorCount}`);
             }
         };
     } catch (e) {
-        console.error("保存错题失败:", e);
+        console.error("保存历史记录失败:", e);
+    }
+}
+
+async function getProblemHistory(qid) {
+    if (!qid) return null; // 防御空 key 报错
+    try {
+        const db = await initDB();
+        return new Promise((resolve) => {
+            const tx = db.transaction(STORE_NAME, 'readonly');
+            const store = tx.objectStore(STORE_NAME);
+            const req = store.get(qid);
+            req.onsuccess = () => resolve(req.result || null);
+            req.onerror = () => resolve(null);
+        });
+    } catch (e) {
+        return null;
     }
 }
 
@@ -174,8 +195,8 @@ async function getErrorBook() {
             const store = tx.objectStore(STORE_NAME);
             const request = store.getAll();
             request.onsuccess = () => {
-                // 按时间倒序排列
-                const results = request.result || [];
+                // 过滤出真正有错题记录的，并按时间倒序排列
+                const results = (request.result || []).filter(r => r.errorCount > 0);
                 results.sort((a, b) => b.timestamp - a.timestamp);
                 resolve(results);
             };
@@ -227,6 +248,7 @@ async function renderErrorBook() {
                 <span style="color: #666; margin-left: 5px;">${err.levelname} ${err.qtypename}</span>
             </div>
             <div style="text-align: right; color: #999; min-width: 80px;">
+                <span style="color: #059669; font-size: 11px; margin-right: 3px;">对${err.correctCount || 0}</span>
                 <span style="color: #dc2626; font-weight: bold; margin-right: 5px;">错${err.errorCount}次</span>
                 ${date}
             </div>
@@ -240,8 +262,10 @@ async function renderErrorBook() {
 // 3. 数据处理逻辑
 // ==========================================
 let currentProblemData = null;
+let currentProblemHistory = null;
+let currentProblemId = null;
 
-window.addEventListener("message", function(event) {
+window.addEventListener("message", async function(event) {
     if (event.source != window) return;
     if (!event.data || event.data.type !== "101_GAME_DATA") return;
 
@@ -249,13 +273,27 @@ window.addEventListener("message", function(event) {
     const answerResult = event.data.answerResult;
     const isNewResult = event.data.isNewResult;
     console.log("【助手】来源:", event.data.source, "| 结果:", answerResult, "| 新结果:", isNewResult);
-    updateUI(answerResult, isNewResult);
+    
+    // 如果切题了，重新获取历史记录
+    if (currentProblemData && currentProblemData.publicid !== currentProblemId) {
+        currentProblemId = currentProblemData.publicid;
+        currentProblemHistory = await getProblemHistory(currentProblemId);
+    }
+
+    // 如果产生了新结果（从 0 变成 1 或 2），记录到数据库
+    if (isNewResult && (answerResult === 1 || answerResult === 2)) {
+        await saveProblemHistory(currentProblemData, answerResult === 1);
+        // 重新获取最新的历史记录以更新 UI
+        currentProblemHistory = await getProblemHistory(currentProblemId);
+    }
+
+    updateUI(answerResult);
 });
 
 // ==========================================
 // 4. UI 更新函数
 // ==========================================
-function updateUI(answerResult, isNewResult) {
+function updateUI(answerResult) {
     const statusDiv = document.getElementById('helper-status');
     if (!statusDiv || !currentProblemData) return;
 
@@ -271,26 +309,19 @@ function updateUI(answerResult, isNewResult) {
     if (finalResult === 1) {
         statusHtml += `<div style="margin-top:4px; font-weight:bold; color:#059669;">✅ 本题已通过</div>`;
     } else if (finalResult === 2) {
-        if (isNewResult) {
-            statusHtml += `<div style="margin-top:4px; font-weight:bold; color:#dc2626;">❌ 本题未通过 (已记录到错题本)</div>`;
-            saveErrorProblem(currentProblemData);
-        } else {
-            statusHtml += `<div style="margin-top:4px; font-weight:bold; color:#dc2626;">❌ 历史错误 (未通过)</div>`;
-            statusHtml += `<button id="btn-manual-record" style="margin-top:4px; font-size:11px; padding:2px 6px; background:#f59e0b; color:white; border:none; border-radius:3px; cursor:pointer;">手动加入错题本</button>`;
-        }
+        statusHtml += `<div style="margin-top:4px; font-weight:bold; color:#dc2626;">❌ 本题未通过</div>`;
     } else {
         statusHtml += `<div style="margin-top:4px; font-weight:bold; color:#d97706;">⏳ 尚未作答</div>`;
     }
 
-    statusDiv.innerHTML = statusHtml;
-
-    const manualBtn = document.getElementById('btn-manual-record');
-    if (manualBtn) {
-        manualBtn.onclick = () => {
-            saveErrorProblem(currentProblemData);
-            manualBtn.innerText = "已加入";
-            manualBtn.style.background = "#059669";
-            manualBtn.disabled = true;
-        };
+    // 渲染历史战绩
+    if (currentProblemHistory) {
+        const correct = currentProblemHistory.correctCount || 0;
+        const error = currentProblemHistory.errorCount || 0;
+        statusHtml += `<div style="margin-top:8px; font-size:12px; color:#4b5563; text-align:center; background:#f3f4f6; padding:4px; border-radius:4px;">📊 历史战绩：${correct}对 ${error}错</div>`;
+    } else {
+        statusHtml += `<div style="margin-top:8px; font-size:12px; color:#4b5563; text-align:center; background:#f3f4f6; padding:4px; border-radius:4px;">📊 历史战绩：初次挑战</div>`;
     }
+
+    statusDiv.innerHTML = statusHtml;
 }
