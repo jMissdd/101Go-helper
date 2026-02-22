@@ -7,7 +7,7 @@ s.onload = function() { this.remove(); };
 (document.head || document.documentElement).appendChild(s);
 
 // ==========================================
-// 2. 创建 UI 面板 (可拖动)
+// 2. 创建 UI 面板
 // ==========================================
 function createPanel() {
     const existingPanel = document.getElementById('weiqi-helper-panel');
@@ -16,7 +16,7 @@ function createPanel() {
     const panel = document.createElement('div');
     panel.id = 'weiqi-helper-panel';
     panel.innerHTML = `
-        <div id="weiqi-helper-header" style="cursor: move;">
+        <div id="weiqi-helper-header">
             <span>101围棋助手</span>
             <span class="close-btn" title="收起">×</span>
         </div>
@@ -25,76 +25,25 @@ function createPanel() {
                 <span class="status-tag tag-wait">等待题目数据...</span>
             </div>
             
-            <button id="btn-show-errors" class="helper-btn" style="background-color: #f59e0b; color: white; border: none;">📚 查看错题本</button>
+            <button id="btn-show-data" class="helper-btn">� 显示原始数据</button>
+            <button id="btn-export-sgf" class="helper-btn primary">💾 导出本题 SGF</button>
             
-            <div id="error-book-area" style="display:none; margin-top:10px; max-height: 200px; overflow-y: auto; border-top: 1px solid #eee; padding-top: 10px;">
-                <div style="font-weight: bold; margin-bottom: 5px;">我的错题本</div>
-                <ul id="error-list" style="list-style: none; padding: 0; margin: 0; font-size: 12px;">
-                    <li style="color: #666;">加载中...</li>
-                </ul>
-                <button id="btn-clear-errors" style="margin-top: 10px; font-size: 11px; padding: 2px 5px; cursor: pointer;">清空错题本</button>
+            <div id="data-display-area" style="display:none; margin-top:10px;">
+                <textarea id="sgf-textarea" rows="5" style="width:100%; font-size:11px;"></textarea>
             </div>
         </div>
     `;
     document.body.appendChild(panel);
-
-    // --- 拖动逻辑 ---
-    const header = panel.querySelector('#weiqi-helper-header');
-    let isDragging = false;
-    let offsetX, offsetY;
-
-    header.addEventListener('mousedown', (e) => {
-        if (e.target.classList.contains('close-btn')) return;
-        isDragging = true;
-        offsetX = e.clientX - panel.getBoundingClientRect().left;
-        offsetY = e.clientY - panel.getBoundingClientRect().top;
-        panel.style.transition = 'none'; // 拖动时取消动画，防止卡顿
-    });
-
-    document.addEventListener('mousemove', (e) => {
-        if (!isDragging) return;
-        let newX = e.clientX - offsetX;
-        let newY = e.clientY - offsetY;
-        
-        // 边界检查，防止拖出屏幕
-        const maxX = window.innerWidth - panel.offsetWidth;
-        const maxY = window.innerHeight - panel.offsetHeight;
-        newX = Math.max(0, Math.min(newX, maxX));
-        newY = Math.max(0, Math.min(newY, maxY));
-
-        panel.style.left = newX + 'px';
-        panel.style.top = newY + 'px';
-        panel.style.right = 'auto'; // 覆盖默认的 right 定位
-        panel.style.bottom = 'auto'; // 覆盖默认的 bottom 定位
-    });
-
-    document.addEventListener('mouseup', () => {
-        isDragging = false;
-        panel.style.transition = ''; // 恢复动画
-    });
-    // --- 拖动逻辑结束 ---
 
     // 绑定关闭按钮
     panel.querySelector('.close-btn').addEventListener('click', () => {
         panel.style.display = 'none';
     });
     
-    // 绑定查看错题本按钮
-    panel.querySelector('#btn-show-errors').addEventListener('click', () => {
-        const area = document.getElementById('error-book-area');
-        if (area.style.display === 'none') {
-            area.style.display = 'block';
-            renderErrorBook();
-        } else {
-            area.style.display = 'none';
-        }
-    });
-    
-    // 绑定清空错题本按钮
-    panel.querySelector('#btn-clear-errors').addEventListener('click', () => {
-        if (confirm('确定要清空所有错题记录吗？')) {
-            clearErrorBook().then(() => renderErrorBook());
-        }
+    // 绑定显示数据按钮
+    panel.querySelector('#btn-show-data').addEventListener('click', () => {
+        const area = document.getElementById('data-display-area');
+        area.style.display = area.style.display === 'none' ? 'block' : 'none';
     });
 
     return panel;
@@ -103,225 +52,122 @@ function createPanel() {
 // 初始化面板
 createPanel();
 
-// ==========================================
-// 2.5 IndexedDB 错题本存储逻辑
-// ==========================================
-const DB_NAME = '101WeiqiHelperDB';
-const STORE_NAME = 'error_book';
-
-function initDB() {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, 1);
-        request.onerror = (event) => reject("IndexedDB error: " + event.target.error);
-        request.onsuccess = (event) => resolve(event.target.result);
-        request.onupgradeneeded = (event) => {
-            const db = event.target.result;
-            if (!db.objectStoreNames.contains(STORE_NAME)) {
-                // 以题目 ID 为主键
-                const store = db.createObjectStore(STORE_NAME, { keyPath: 'qid' });
-                store.createIndex('timestamp', 'timestamp', { unique: false });
-            }
-        };
-    });
-}
-
-async function saveProblemHistory(problemData, isCorrect = false) {
-    if (!problemData || !problemData.publicid) return;
-    
-    try {
-        const db = await initDB();
-        const tx = db.transaction(STORE_NAME, 'readwrite');
-        const store = tx.objectStore(STORE_NAME);
-        
-        const qid = problemData.publicid;
-        
-        // 先查询是否已存在
-        const getReq = store.get(qid);
-        getReq.onsuccess = () => {
-            let record = getReq.result;
-            if (record) {
-                // 更新次数和时间
-                if (isCorrect) {
-                    record.correctCount = (record.correctCount || 0) + 1;
-                } else {
-                    record.errorCount = (record.errorCount || 0) + 1;
-                }
-                record.timestamp = Date.now();
-                store.put(record);
-                console.log(`【历史记录】更新 Q-${qid}，对:${record.correctCount || 0} 错:${record.errorCount || 0}`);
-            } else {
-                // 新增记录
-                record = {
-                    qid: qid,
-                    title: problemData.title || '',
-                    desc: problemData.desc || '',
-                    levelname: problemData.levelname || '',
-                    qtypename: problemData.qtypename || '',
-                    errorCount: isCorrect ? 0 : 1,
-                    correctCount: isCorrect ? 1 : 0,
-                    timestamp: Date.now(),
-                    url: window.location.href
-                };
-                store.add(record);
-                console.log(`【历史记录】新增 Q-${qid}，对:${record.correctCount} 错:${record.errorCount}`);
-            }
-        };
-    } catch (e) {
-        console.error("保存历史记录失败:", e);
-    }
-}
-
-async function getProblemHistory(qid) {
-    if (!qid) return null; // 防御空 key 报错
-    try {
-        const db = await initDB();
-        return new Promise((resolve) => {
-            const tx = db.transaction(STORE_NAME, 'readonly');
-            const store = tx.objectStore(STORE_NAME);
-            const req = store.get(qid);
-            req.onsuccess = () => resolve(req.result || null);
-            req.onerror = () => resolve(null);
-        });
-    } catch (e) {
-        return null;
-    }
-}
-
-async function getErrorBook() {
-    try {
-        const db = await initDB();
-        return new Promise((resolve, reject) => {
-            const tx = db.transaction(STORE_NAME, 'readonly');
-            const store = tx.objectStore(STORE_NAME);
-            const request = store.getAll();
-            request.onsuccess = () => {
-                // 过滤出真正有错题记录的，并按时间倒序排列
-                const results = (request.result || []).filter(r => r.errorCount > 0);
-                results.sort((a, b) => b.timestamp - a.timestamp);
-                resolve(results);
-            };
-            request.onerror = () => reject(request.error);
-        });
-    } catch (e) {
-        console.error("读取错题本失败:", e);
-        return [];
-    }
-}
-
-async function clearErrorBook() {
-    try {
-        const db = await initDB();
-        return new Promise((resolve, reject) => {
-            const tx = db.transaction(STORE_NAME, 'readwrite');
-            const store = tx.objectStore(STORE_NAME);
-            const request = store.clear();
-            request.onsuccess = () => resolve();
-            request.onerror = () => reject(request.error);
-        });
-    } catch (e) {
-        console.error("清空错题本失败:", e);
-    }
-}
-
-async function renderErrorBook() {
-    const listEl = document.getElementById('error-list');
-    if (!listEl) return;
-    
-    listEl.innerHTML = '<li style="color: #666;">加载中...</li>';
-    
-    const errors = await getErrorBook();
-    
-    if (errors.length === 0) {
-        listEl.innerHTML = '<li style="color: #666; padding: 5px 0;">暂无错题记录，继续加油！</li>';
-        return;
-    }
-    
-    listEl.innerHTML = '';
-    errors.forEach(err => {
-        const date = new Date(err.timestamp).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-        const li = document.createElement('li');
-        li.style.cssText = 'padding: 5px 0; border-bottom: 1px dashed #eee; display: flex; justify-content: space-between; align-items: center;';
-        
-        li.innerHTML = `
-            <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                <a href="${err.url}" target="_blank" style="color: #2563eb; text-decoration: none; font-weight: bold;">Q-${err.qid}</a>
-                <span style="color: #666; margin-left: 5px;">${err.levelname} ${err.qtypename}</span>
-            </div>
-            <div style="text-align: right; color: #999; min-width: 80px;">
-                <span style="color: #059669; font-size: 11px; margin-right: 3px;">对${err.correctCount || 0}</span>
-                <span style="color: #dc2626; font-weight: bold; margin-right: 5px;">错${err.errorCount}次</span>
-                ${date}
-            </div>
-        `;
-        listEl.appendChild(li);
-    });
-}
-
 
 // ==========================================
 // 3. 数据处理逻辑
 // ==========================================
 let currentProblemData = null;
-let currentProblemHistory = null;
-let currentProblemId = null;
 
-window.addEventListener("message", async function(event) {
+// 监听来自 inject.js 的消息
+window.addEventListener("message", function(event) {
     if (event.source != window) return;
-    if (!event.data || event.data.type !== "101_GAME_DATA") return;
 
-    currentProblemData = event.data.data;
-    const answerResult = event.data.answerResult;
-    const isNewResult = event.data.isNewResult;
-    console.log("【助手】来源:", event.data.source, "| 结果:", answerResult, "| 新结果:", isNewResult);
-    
-    // 如果切题了，重新获取历史记录
-    if (currentProblemData && currentProblemData.publicid !== currentProblemId) {
-        currentProblemId = currentProblemData.publicid;
-        currentProblemHistory = await getProblemHistory(currentProblemId);
+    if (event.data.type && (event.data.type == "101_GAME_DATA")) {
+        console.log("【助手捕捉】收到数据", event.data.data);
+        currentProblemData = event.data.data;
+        updateUI();
     }
-
-    // 如果产生了新结果（从 0 变成 1 或 2），记录到数据库
-    if (isNewResult && (answerResult === 1 || answerResult === 2)) {
-        await saveProblemHistory(currentProblemData, answerResult === 1);
-        // 重新获取最新的历史记录以更新 UI
-        currentProblemHistory = await getProblemHistory(currentProblemId);
-    }
-
-    updateUI(answerResult);
 });
 
 // ==========================================
-// 4. UI 更新函数
+// 4. SGF 转换工具 & 坐标翻译
 // ==========================================
-function updateUI(answerResult) {
+function coordinateToHuman(coord) {
+    if (!coord || coord.length !== 2) return coord;
+    // 'a'=97. 围棋盘左上是aa=A19
+    const colCode = coord.charCodeAt(0) - 97; 
+    const rowCode = coord.charCodeAt(1) - 97;
+
+    const colChars = "ABCDEFGHJKLMNOPQRST"; // 19路跳过I
+    const colStr = colChars[colCode] || "?";
+    
+    // 假设是19路盘，行也是倒序
+    const rowStr = (19 - rowCode).toString();
+
+    return `${colStr}${rowStr}`;
+}
+
+// 简单的多分支 SGF 生成器
+function generateSGF(data) {
+    // 这里如果拿到的是 pure SGF 字符串，直接返回
+    if (typeof data.sgf === 'string') return data.sgf;
+
+    // 如果拿到的是 answers 对象，我们就构造一个 SGF
+    if (data.answers && data.answers.ok && data.answers.ok.length > 0) {
+        let content = "(;GM[1]SZ[19]AP[101Helper:1.0]\n";
+        
+        // 遍历所有正解分支
+        data.answers.ok.forEach((variant, idx) => {
+            // SGF 分支开始
+            content += "(\n";
+            content += `C[正解分支 #${idx+1} (用户: ${variant.username})]\n`;
+            
+            // 默认第一手是被动方(黑)或者主动方(白)? 每日一题好像都是黑先
+            // 我们简单轮流 B/W
+            let turn = "B"; 
+            
+            variant.pts.forEach(pt => {
+                 content += `;${turn}[${pt.p}]`;
+                 if(pt.c) content += `C[${pt.c}]`;
+                 turn = (turn === "B") ? "W" : "B";
+            });
+            
+            content += ")\n";
+        });
+        
+        content += ")";
+        return content;
+    }
+    
+    // 如果是做题模式，没有 answers.ok，或者 ok 是空的
+    // 我们尝试返回从页面提取的初始盘面 SGF
+    if (data._extractedInitialSGF) {
+        return data._extractedInitialSGF;
+    }
+    
+    // 如果连初始盘面都没找到，至少返回一个空的 SGF 框架
+    return "(;GM[1]SZ[19]AP[101Helper:1.0]\n)";
+}
+
+function updateUI() {
     const statusDiv = document.getElementById('helper-status');
-    if (!statusDiv || !currentProblemData) return;
+    const textArea = document.getElementById('sgf-textarea');
+    const exportBtn = document.getElementById('btn-export-sgf');
+    
+    if (currentProblemData) {
+        // 1. 状态更新
+        let statusHtml = `<span class="status-tag tag-success">数据捕获成功</span>`;
+        
+        // 2. 尝试解析第一手推荐
+        if (currentProblemData.answers && currentProblemData.answers.ok && currentProblemData.answers.ok.length > 0) {
+             const bestVariant = currentProblemData.answers.ok[0];
+             if (bestVariant.pts && bestVariant.pts.length > 0) {
+                 const firstMove = bestVariant.pts[0].p;
+                 const humanPos = coordinateToHuman(firstMove);
+                 statusHtml += `<div style="margin-top:8px; font-weight:bold; color:#059669;">✅ 推荐首手: ${humanPos} (${firstMove})</div>`;
+             }
+        } else {
+             // 如果没有答案，说明是做题模式
+             statusHtml += `<div style="margin-top:8px; font-weight:bold; color:#d97706;">⚠️ 当前为做题模式，服务器未下发答案。仅可导出初始盘面。</div>`;
+        }
+        statusDiv.innerHTML = statusHtml;
 
-    let statusHtml = `<span class="status-tag tag-success">数据捕获成功</span>`;
-
-    if (currentProblemData.publicid) {
-        statusHtml += `<div style="margin-top:4px; font-size:12px; color:#666;">题目 Q-${currentProblemData.publicid} | ${currentProblemData.levelname || ''} | ${currentProblemData.qtypename || ''}</div>`;
+        // 3. 生成 SGF 内容供导出/查看
+        const finalSGF = generateSGF(currentProblemData);
+        textArea.value = finalSGF;
+        
+        // 4. 绑定导出按钮
+        // 移除旧监听器最好的办法是克隆节点，或者简单地覆盖 onclick
+        exportBtn.onclick = () => {
+             const blob = new Blob([finalSGF], {type: "application/x-go-sgf"});
+             const url = URL.createObjectURL(blob);
+             const a = document.createElement('a');
+             a.href = url;
+             a.download = `101_Problem_${new Date().toISOString().slice(0,10)}.sgf`;
+             document.body.appendChild(a);
+             a.click();
+             document.body.removeChild(a);
+             URL.revokeObjectURL(url);
+        };
     }
-
-    // null/undefined 统一视为 0（尚未作答）
-    const finalResult = (answerResult === null || answerResult === undefined) ? 0 : answerResult;
-
-    if (finalResult === 1) {
-        statusHtml += `<div style="margin-top:4px; font-weight:bold; color:#059669;">✅ 本题已通过</div>`;
-    } else if (finalResult === 2) {
-        statusHtml += `<div style="margin-top:4px; font-weight:bold; color:#dc2626;">❌ 本题未通过</div>`;
-    } else {
-        statusHtml += `<div style="margin-top:4px; font-weight:bold; color:#d97706;">⏳ 尚未作答</div>`;
-    }
-
-    // 渲染历史战绩
-    if (currentProblemHistory) {
-        const correct = currentProblemHistory.correctCount || 0;
-        const error = currentProblemHistory.errorCount || 0;
-        statusHtml += `<div style="margin-top:8px; font-size:12px; color:#4b5563; text-align:center; background:#f3f4f6; padding:4px; border-radius:4px;">📊 历史战绩：${correct}对 ${error}错</div>`;
-    } else {
-        statusHtml += `<div style="margin-top:8px; font-size:12px; color:#4b5563; text-align:center; background:#f3f4f6; padding:4px; border-radius:4px;">📊 历史战绩：初次挑战</div>`;
-    }
-
-    statusDiv.innerHTML = statusHtml;
 }
