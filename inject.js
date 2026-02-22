@@ -21,6 +21,17 @@
         return null;
     }
 
+    function detectResultFromStatusBlock() {
+        try {
+            const pageText = (document.body && document.body.innerText) ? document.body.innerText : '';
+            if (!pageText) return null;
+
+            if (pageText.includes('本题已通过') || pageText.includes('已通过')) return 1;
+            if (pageText.includes('本题未通过') || pageText.includes('未通过') || pageText.includes('超时') || pageText.includes('失败')) return 2;
+        } catch (e) {}
+        return null;
+    }
+
     function readAnswerResultFromStore(val, problemId) {
         let fallbackZero = null;
         const tag = '[Q-' + (problemId || '?') + ']';
@@ -50,11 +61,18 @@
                     };
                     console.log(tag + ' Alpine store 快照:', dump);
 
+                    // 【检块优先】：统一模式下，优先使用“通过/未通过/超时”块作为最终结果源
+                    let r = detectResultFromStatusBlock();
+                    if (r !== null) {
+                        console.log(tag + ' 结果来源: statusBlock =', r === 1 ? '已通过' : '未通过/超时');
+                        return r;
+                    }
+
                     const currentPtsLength = Array.isArray(store.simulatorDuizhanPts) ? store.simulatorDuizhanPts.length : 0;
                     const initialPtsLength = Number.isFinite(window._initialPtsLength) ? window._initialPtsLength : 0;
                     const hasMoveSignal = !!store.musthideFirstMoveDone || currentPtsLength > initialPtsLength;
 
-                    let r;
+                    r = null;
                     // 【状态机锁】：浏览模式下切题后，等待“首手动作”信号再解锁，避免沿用上一题的脏结果
                     if (window._problemState === 'PENDING') {
                         if (hasMoveSignal) {
@@ -147,9 +165,21 @@
                             }
                         }
                     } catch (e) {}
-                    // 【修改】：切题或刷新时，强制重置为未作答(0)，忽略网站自带的历史记录(val.myan.result)
-                    console.log('[SCAN] 新题/刷新 → 强制重置状态为未作答(0)，进入 PENDING 锁，初始步数=' + window._initialPtsLength);
-                    answerResult = 0;
+                    // 【修改】：切题时重置为未作答；刷新首帧若已出现结果块则直接恢复结果
+                    if (isFirstLoad) {
+                        const bootBlockResult = detectResultFromStatusBlock();
+                        if (bootBlockResult !== null) {
+                            console.log('[SCAN] 首次加载命中结果块，直接恢复结果:', bootBlockResult);
+                            window._problemState = 'READY';
+                            answerResult = bootBlockResult;
+                        } else {
+                            console.log('[SCAN] 新题/刷新 → 强制重置状态为未作答(0)，进入 PENDING 锁，初始步数=' + window._initialPtsLength);
+                            answerResult = 0;
+                        }
+                    } else {
+                        console.log('[SCAN] 新题/刷新 → 强制重置状态为未作答(0)，进入 PENDING 锁，初始步数=' + window._initialPtsLength);
+                        answerResult = 0;
+                    }
                 } else {
                     answerResult = readAnswerResultFromStore(val, currentProblemId);
                 }
