@@ -21,16 +21,7 @@
         return null;
     }
 
-    function detectResultFromStatusBlock() {
-        try {
-            const pageText = (document.body && document.body.innerText) ? document.body.innerText : '';
-            if (!pageText) return null;
-
-            if (pageText.includes('本题已通过') || pageText.includes('已通过')) return 1;
-            if (pageText.includes('本题未通过') || pageText.includes('未通过') || pageText.includes('超时') || pageText.includes('失败')) return 2;
-        } catch (e) {}
-        return null;
-    }
+    // 【已删除】detectResultFromStatusBlock 函数，因为它会读取 document.body.innerText 导致插件自己读自己的 UI 文本而产生误判。
 
     function readAnswerResultFromStore(val, problemId) {
         let fallbackZero = null;
@@ -61,52 +52,42 @@
                     };
                     console.log(tag + ' Alpine store 快照:', dump);
 
-                    // 【检块优先】：统一模式下，优先使用“通过/未通过/超时”块作为最终结果源
-                    let r = detectResultFromStatusBlock();
-                    if (r !== null) {
-                        console.log(tag + ' 结果来源: statusBlock =', r === 1 ? '已通过' : '未通过/超时');
-                        return r;
-                    }
-
-                    const currentPtsLength = Array.isArray(store.simulatorDuizhanPts) ? store.simulatorDuizhanPts.length : 0;
-                    const initialPtsLength = Number.isFinite(window._initialPtsLength) ? window._initialPtsLength : 0;
-                    const hasMoveSignal = !!store.musthideFirstMoveDone || currentPtsLength > initialPtsLength;
-
-                    r = null;
-                    // 【状态机锁】：浏览模式下切题后，等待“首手动作”信号再解锁，避免沿用上一题的脏结果
-                    if (window._problemState === 'PENDING') {
-                        if (hasMoveSignal) {
-                            console.log(tag + ' 观察到首手动作信号，解除 PENDING 锁', {
-                                currentPtsLength,
-                                initialPtsLength,
-                                musthideFirstMoveDone: !!store.musthideFirstMoveDone
-                            });
-                            window._problemState = 'READY';
-                        } else {
-                            console.log(tag + ' 处于 PENDING 锁（等待首手动作），忽略结果值:', {
-                                duizhanResult: store.duizhanResult,
-                                currentPtsLength,
-                                initialPtsLength,
-                                musthideFirstMoveDone: !!store.musthideFirstMoveDone
-                            });
-                            fallbackZero = 0;
-                            return 0;
+                    // 【最高优先级：破壁人 taskinfo.result】
+                    // 如果 taskinfo.result 已经明确是 1 或 2，直接采信，无视任何锁！
+                    if (store.taskinfo && typeof store.taskinfo.result !== 'undefined') {
+                        let r = check(store.taskinfo.result);
+                        if (r === 1 || r === 2) {
+                            console.log(tag + ' [破壁] 结果来源: taskinfo.result =', r);
+                            window._problemState = 'READY'; // 强行解锁
+                            return r;
                         }
                     }
 
+                    // 【状态机锁】：切题后，等待 duizhanResult 变为 -1 或 0 再解锁
+                    if (window._problemState === 'PENDING') {
+                        const isAnswering = store.duizhanResult === -1 || store.duizhanResult === 0 || store.duizhanResult === '0';
+                        const hasMoved = Array.isArray(store.simulatorDuizhanPts) && store.simulatorDuizhanPts.length > 0;
+                        
+                        if (isAnswering || hasMoved) {
+                            console.log(tag + ' 观察到作答信号 (duizhanResult=' + store.duizhanResult + ', hasMoved=' + hasMoved + ')，解除 PENDING 锁');
+                            window._problemState = 'READY';
+                        } else {
+                            console.log(tag + ' 处于 PENDING 锁（等待作答信号），忽略当前结果值:', store.duizhanResult);
+                            return 0; // 锁定中，强制返回未作答
+                        }
+                    }
+
+                    // 【安全期】：状态机已解锁，可以安全读取 duizhanResult 了
                     if (!skipDuizhan && typeof store.duizhanResult !== 'undefined') {
-                        r = check(store.duizhanResult);
+                        let r = check(store.duizhanResult);
                         if (r !== null) { console.log(tag + ' 结果来源: duizhanResult =', store.duizhanResult); return r; }
                     }
-                    if (store.taskinfo && typeof store.taskinfo.result !== 'undefined') {
-                        r = check(store.taskinfo.result);
-                        if (r !== null) { console.log(tag + ' 结果来源: taskinfo.result =', store.taskinfo.result); return r; }
-                    }
+                    
+                    // 最后保底 answerResult
                     if (typeof store.answerResult !== 'undefined') {
-                        r = check(store.answerResult);
+                        let r = check(store.answerResult);
                         if (r !== null) { console.log(tag + ' 结果来源: answerResult =', store.answerResult); return r; }
                     }
-                    // 【修改】：移除了对 store.qqdata.myan.result 的读取，因为它包含的是历史记录，会导致刷新后直接显示已作答
                 }
             }
         } catch(e) { console.log('readAnswerResultFromStore 异常:', e.message); }
@@ -167,15 +148,9 @@
                     } catch (e) {}
                     // 【修改】：切题时重置为未作答；刷新首帧若已出现结果块则直接恢复结果
                     if (isFirstLoad) {
-                        const bootBlockResult = detectResultFromStatusBlock();
-                        if (bootBlockResult !== null) {
-                            console.log('[SCAN] 首次加载命中结果块，直接恢复结果:', bootBlockResult);
-                            window._problemState = 'READY';
-                            answerResult = bootBlockResult;
-                        } else {
-                            console.log('[SCAN] 新题/刷新 → 强制重置状态为未作答(0)，进入 PENDING 锁，初始步数=' + window._initialPtsLength);
-                            answerResult = 0;
-                        }
+                        // 既然废弃了 UI 检块，这里直接重置为未作答
+                        console.log('[SCAN] 新题/刷新 → 强制重置状态为未作答(0)，进入 PENDING 锁，初始步数=' + window._initialPtsLength);
+                        answerResult = 0;
                     } else {
                         console.log('[SCAN] 新题/刷新 → 强制重置状态为未作答(0)，进入 PENDING 锁，初始步数=' + window._initialPtsLength);
                         answerResult = 0;
@@ -239,48 +214,6 @@
         setTimeout(scanGlobalVariables, 2000); // 再等一次确保 Alpine store 就绪
     });
     
-    // 增加 MutationObserver 实时监听 DOM 变化，防止提示语一闪而过被漏掉
-    let observerScanTimer = null;
-    const observer = new MutationObserver((mutations) => {
-        let shouldCheck = false;
-        for (let mutation of mutations) {
-            if (mutation.type === 'attributes') {
-                const target = mutation.target;
-                if (target && target.nodeType === Node.ELEMENT_NODE) {
-                    const cls = target.className ? String(target.className) : '';
-                    if (cls.includes('qipan-result') || cls.includes('icon') || cls.includes('ok') || cls.includes('fail')) {
-                        shouldCheck = true;
-                        break;
-                    }
-                }
-            } else if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-                shouldCheck = true;
-                break;
-            }
-        }
-        if (shouldCheck) {
-            if (detectResultFromResultPanel() !== null) {
-                if (observerScanTimer) clearTimeout(observerScanTimer);
-                observerScanTimer = setTimeout(() => {
-                    scanGlobalVariables();
-                }, 30);
-            }
-        }
-    });
-    
-    // 监听整个 body 的子节点变化
-    const startObserve = () => {
-        if (!document.body) return;
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true,
-            attributes: true,
-            attributeFilter: ['class', 'style']
-        });
-    };
-    if (document.body) startObserve();
-    else window.addEventListener('DOMContentLoaded', startObserve, { once: true });
-
     // 定时轮询保底
     let checks = 0;
     const timer = setInterval(function() {
