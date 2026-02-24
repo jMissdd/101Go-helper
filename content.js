@@ -6,6 +6,58 @@ s.src = chrome.runtime.getURL('inject.js');
 s.onload = function() { this.remove(); };
 (document.head || document.documentElement).appendChild(s);
 
+const MODE_KEY = 'weiqi_helper_mode';
+const LIMIT_KEY = 'weiqi_helper_time_limit_sec';
+
+let helperMode = localStorage.getItem(MODE_KEY) || 'browse'; // browse | practice
+let practiceTimeLimitSec = parseInt(localStorage.getItem(LIMIT_KEY) || '60', 10);
+if (!Number.isFinite(practiceTimeLimitSec) || practiceTimeLimitSec < 5) practiceTimeLimitSec = 60;
+
+const practiceSession = {
+    byQid: new Map(),
+    stats: {
+        total: 0,
+        correct: 0,
+        wrong: 0,
+        timeoutWrong: 0,
+    }
+};
+
+let currentDisplayResult = 0;
+let currentCountdownSec = null;
+let practiceTimerHandle = null;
+
+function ensurePracticeState(qid, problemData) {
+    if (!qid) return null;
+    const key = String(qid);
+    let state = practiceSession.byQid.get(key);
+    if (!state) {
+        const now = Date.now();
+        state = {
+            qid: key,
+            status: 0,
+            locked: false,
+            reason: null,
+            counted: false,
+            recordedHistory: false,
+            startedAt: now,
+            deadlineAt: now + practiceTimeLimitSec * 1000,
+            data: problemData ? { ...problemData } : null,
+        };
+        practiceSession.byQid.set(key, state);
+    } else if (problemData) {
+        state.data = { ...(state.data || {}), ...problemData };
+    }
+    return state;
+}
+
+function formatCountdown(sec) {
+    const s = Math.max(0, sec || 0);
+    const mm = String(Math.floor(s / 60)).padStart(2, '0');
+    const ss = String(s % 60).padStart(2, '0');
+    return `${mm}:${ss}`;
+}
+
 // ==========================================
 // 2. 创建 UI 面板 (可拖动)
 // ==========================================
@@ -24,6 +76,22 @@ function createPanel() {
             <div id="helper-status" class="helper-info-block">
                 <span class="status-tag tag-wait">等待题目数据...</span>
             </div>
+
+            <div id="helper-mode-controls" style="margin-top:8px; border:1px solid #e5e7eb; border-radius:6px; padding:8px; background:#f9fafb;">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
+                    <span style="font-size:12px; color:#374151;">模式</span>
+                    <select id="helper-mode" style="font-size:12px; padding:2px 6px;">
+                        <option value="browse">浏览模式</option>
+                        <option value="practice">做题模式</option>
+                    </select>
+                </div>
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                    <span style="font-size:12px; color:#374151;">限时(秒)</span>
+                    <input id="helper-time-limit" type="number" min="5" step="5" style="width:80px; font-size:12px; padding:2px 6px;" />
+                </div>
+            </div>
+
+            <div id="practice-stats" class="helper-info-block" style="display:none; margin-top:8px;"></div>
             
             <button id="btn-show-errors" class="helper-btn" style="background-color: #f59e0b; color: white; border: none;">📚 查看错题本</button>
             
@@ -97,11 +165,53 @@ function createPanel() {
         }
     });
 
+    const modeSelect = panel.querySelector('#helper-mode');
+    const limitInput = panel.querySelector('#helper-time-limit');
+    modeSelect.value = helperMode;
+    limitInput.value = String(practiceTimeLimitSec);
+
+    modeSelect.addEventListener('change', () => {
+        helperMode = modeSelect.value === 'practice' ? 'practice' : 'browse';
+        localStorage.setItem(MODE_KEY, helperMode);
+
+        if (helperMode === 'practice' && currentProblemId) {
+            ensurePracticeState(currentProblemId, currentProblemData);
+        }
+        if (helperMode === 'browse') {
+            currentCountdownSec = null;
+        }
+        updateUI(currentDisplayResult);
+    });
+
+    limitInput.addEventListener('change', () => {
+        let sec = parseInt(limitInput.value || '60', 10);
+        if (!Number.isFinite(sec) || sec < 5) sec = 60;
+        practiceTimeLimitSec = sec;
+        limitInput.value = String(practiceTimeLimitSec);
+        localStorage.setItem(LIMIT_KEY, String(practiceTimeLimitSec));
+
+        if (helperMode === 'practice' && currentProblemId) {
+            const state = ensurePracticeState(currentProblemId, currentProblemData);
+            if (state && !state.locked) {
+                const now = Date.now();
+                state.startedAt = now;
+                state.deadlineAt = now + practiceTimeLimitSec * 1000;
+            }
+        }
+        updateUI(currentDisplayResult);
+    });
+
     return panel;
 }
 
 // 初始化面板
 createPanel();
+
+function getCurrentPracticeStatsText() {
+    const s = practiceSession.stats;
+    const accuracy = s.total > 0 ? Math.round((s.correct / s.total) * 100) : 0;
+    return `📈 做题统计：总${s.total} | 对${s.correct} | 错${s.wrong}（超时${s.timeoutWrong}） | 正确率${accuracy}%`;
+}
 
 // ==========================================
 // 2.5 IndexedDB 错题本存储逻辑
@@ -265,6 +375,50 @@ let currentProblemData = null;
 let currentProblemHistory = null;
 let currentProblemId = null;
 
+async function lockPracticeResult(qid, result, reason) {
+    const state = ensurePracticeState(qid, currentProblemData);
+    if (!state || state.locked) return;
+
+    state.status = result;
+    state.locked = true;
+    state.reason = reason;
+
+    if (!state.counted) {
+        practiceSession.stats.total += 1;
+        if (result === 1) practiceSession.stats.correct += 1;
+        else {
+            practiceSession.stats.wrong += 1;
+            if (reason === 'timeout') practiceSession.stats.timeoutWrong += 1;
+        }
+        state.counted = true;
+    }
+
+    if (!state.recordedHistory && state.data) {
+        await saveProblemHistory(state.data, result === 1);
+        state.recordedHistory = true;
+        currentProblemHistory = await getProblemHistory(qid);
+    }
+}
+
+async function checkPracticeTimeoutForCurrent() {
+    if (helperMode !== 'practice' || !currentProblemId) return;
+    const state = ensurePracticeState(currentProblemId, currentProblemData);
+    if (!state) return;
+
+    if (state.locked) {
+        currentCountdownSec = null;
+        return;
+    }
+
+    const now = Date.now();
+    const leftSec = Math.ceil((state.deadlineAt - now) / 1000);
+    currentCountdownSec = Math.max(0, leftSec);
+    if (leftSec <= 0) {
+        await lockPracticeResult(currentProblemId, 2, 'timeout');
+        currentDisplayResult = 2;
+    }
+}
+
 window.addEventListener("message", async function(event) {
     if (event.source != window) return;
     if (!event.data || event.data.type !== "101_GAME_DATA") return;
@@ -280,15 +434,35 @@ window.addEventListener("message", async function(event) {
         currentProblemHistory = await getProblemHistory(currentProblemId);
     }
 
-    // 如果产生了新结果（从 0 变成 1 或 2），记录到数据库
-    if (isNewResult && (answerResult === 1 || answerResult === 2)) {
-        await saveProblemHistory(currentProblemData, answerResult === 1);
-        // 重新获取最新的历史记录以更新 UI
-        currentProblemHistory = await getProblemHistory(currentProblemId);
+    const incomingResult = (answerResult === null || answerResult === undefined) ? 0 : answerResult;
+
+    if (helperMode === 'practice' && currentProblemId) {
+        const state = ensurePracticeState(currentProblemId, currentProblemData);
+        if (state && !state.locked) {
+            if (incomingResult === 1 || incomingResult === 2) {
+                await lockPracticeResult(currentProblemId, incomingResult, 'result');
+            } else {
+                await checkPracticeTimeoutForCurrent();
+            }
+        }
+
+        currentDisplayResult = state && state.locked ? state.status : incomingResult;
+        if (state && state.locked) currentCountdownSec = null;
+    } else {
+        // 浏览模式不写错题统计
+        currentDisplayResult = incomingResult;
+        currentCountdownSec = null;
     }
 
-    updateUI(answerResult);
+    updateUI(currentDisplayResult);
 });
+
+if (!practiceTimerHandle) {
+    practiceTimerHandle = setInterval(async () => {
+        await checkPracticeTimeoutForCurrent();
+        if (helperMode === 'practice') updateUI(currentDisplayResult);
+    }, 1000);
+}
 
 // ==========================================
 // 4. UI 更新函数
@@ -298,6 +472,7 @@ function updateUI(answerResult) {
     if (!statusDiv || !currentProblemData) return;
 
     let statusHtml = `<span class="status-tag tag-success">数据捕获成功</span>`;
+    statusHtml += `<div style="margin-top:4px; font-size:12px; color:#374151;">当前模式：${helperMode === 'practice' ? '📝 做题模式' : '👀 浏览模式'}</div>`;
 
     if (currentProblemData.publicid) {
         statusHtml += `<div style="margin-top:4px; font-size:12px; color:#666;">题目 Q-${currentProblemData.publicid} | ${currentProblemData.levelname || ''} | ${currentProblemData.qtypename || ''}</div>`;
@@ -314,6 +489,11 @@ function updateUI(answerResult) {
         statusHtml += `<div style="margin-top:4px; font-weight:bold; color:#d97706;">⏳ 尚未作答</div>`;
     }
 
+    if (helperMode === 'practice') {
+        const countdown = (currentCountdownSec === null) ? '--:--' : formatCountdown(currentCountdownSec);
+        statusHtml += `<div style="margin-top:6px; font-size:12px; color:#111827;">⏱️ 本题限时：${practiceTimeLimitSec}s | 剩余：${countdown}</div>`;
+    }
+
     // 渲染历史战绩
     if (currentProblemHistory) {
         const correct = currentProblemHistory.correctCount || 0;
@@ -324,4 +504,15 @@ function updateUI(answerResult) {
     }
 
     statusDiv.innerHTML = statusHtml;
+
+    const statsDiv = document.getElementById('practice-stats');
+    if (statsDiv) {
+        if (helperMode === 'practice') {
+            statsDiv.style.display = 'block';
+            statsDiv.innerHTML = getCurrentPracticeStatsText();
+        } else {
+            statsDiv.style.display = 'none';
+            statsDiv.innerHTML = '';
+        }
+    }
 }
