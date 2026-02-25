@@ -102,6 +102,19 @@ function createPanel() {
                 </ul>
                 <button id="btn-clear-errors" style="margin-top: 10px; font-size: 11px; padding: 2px 5px; cursor: pointer;">清空错题本</button>
             </div>
+
+            <div id="book-search-area" style="margin-top:10px; border-top: 1px solid #e5e7eb; padding-top: 10px;">
+                <div style="font-weight: bold; font-size: 12px; margin-bottom: 6px;">📖 棋书搜索</div>
+                <div style="display:flex; gap:4px;">
+                    <input id="book-search-input" type="text" placeholder="书名 / 作者 / 难度"
+                           style="flex:1; font-size:12px; padding:4px 6px; border:1px solid #d1d5db; border-radius:4px; outline:none;" />
+                    <button id="btn-book-search" class="helper-btn" style="width:auto; margin:0; padding:4px 10px; background:#3b82f6; color:white; border-color:#2563eb; font-size:12px;">搜索</button>
+                </div>
+                <div id="book-search-status" style="font-size:11px; color:#999; margin-top:4px; display:none;"></div>
+                <ul id="book-search-results" style="list-style:none; padding:0; margin:6px 0 0 0; font-size:12px; max-height:200px; overflow-y:auto;">
+                    <li style="color: #999; padding: 6px 0;">输入关键词搜索棋书...</li>
+                </ul>
+            </div>
         </div>
     `;
     document.body.appendChild(panel);
@@ -163,6 +176,34 @@ function createPanel() {
         if (confirm('确定要清空所有错题记录吗？')) {
             clearErrorBook().then(() => renderErrorBook());
         }
+    });
+
+    // 棋书搜索绑定
+    let _bookListCache = null;
+    const bookSearchInput = panel.querySelector('#book-search-input');
+    const bookSearchBtn = panel.querySelector('#btn-book-search');
+    const bookSearchStatus = panel.querySelector('#book-search-status');
+
+    async function doBookSearch() {
+        const keyword = bookSearchInput.value;
+        if (!_bookListCache) {
+            bookSearchStatus.style.display = 'block';
+            bookSearchStatus.textContent = '⏳ 首次加载棋书数据...';
+            _bookListCache = await fetchBookList();
+            if (_bookListCache.length > 0) {
+                bookSearchStatus.textContent = `✅ 已加载 ${_bookListCache.length} 本棋书`;
+                setTimeout(() => { bookSearchStatus.style.display = 'none'; }, 2000);
+            } else {
+                bookSearchStatus.textContent = '❌ 加载失败，请检查网络后重试';
+            }
+        }
+        const results = searchBooks(_bookListCache, keyword);
+        renderBookSearchResults(results, keyword);
+    }
+
+    bookSearchBtn.addEventListener('click', doBookSearch);
+    bookSearchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') doBookSearch();
     });
 
     const modeSelect = panel.querySelector('#helper-mode');
@@ -365,6 +406,104 @@ async function renderErrorBook() {
         `;
         listEl.appendChild(li);
     });
+}
+
+
+// ==========================================
+// 2.7 棋书搜索逻辑
+// ==========================================
+const BOOK_CACHE_KEY = 'weiqi_helper_book_cache';
+const BOOK_CACHE_TTL = 24 * 60 * 60 * 1000; // 24小时
+
+async function fetchBookList() {
+    // 先检查 localStorage 缓存
+    try {
+        const cached = localStorage.getItem(BOOK_CACHE_KEY);
+        if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Date.now() - parsed.timestamp < BOOK_CACHE_TTL && Array.isArray(parsed.data) && parsed.data.length > 0) {
+                console.log(`【棋书】从缓存加载 ${parsed.data.length} 本棋书`);
+                return parsed.data;
+            }
+        }
+    } catch(e) {}
+
+    // 从服务器获取
+    try {
+        const resp = await fetch('https://www.101weiqi.cn/book/list/');
+        const html = await resp.text();
+        const match = html.match(/var\s+g_books\s*=\s*(\[[\s\S]*?\]);/);
+        if (!match) {
+            console.error('【棋书】未找到 g_books 数据');
+            return [];
+        }
+        const books = JSON.parse(match[1]);
+        localStorage.setItem(BOOK_CACHE_KEY, JSON.stringify({ data: books, timestamp: Date.now() }));
+        console.log(`【棋书】从服务器加载 ${books.length} 本棋书`);
+        return books;
+    } catch(e) {
+        console.error('【棋书】获取棋书列表失败:', e);
+        return [];
+    }
+}
+
+function searchBooks(books, keyword) {
+    if (!keyword || !keyword.trim()) return [];
+    const kw = keyword.trim().toLowerCase();
+    return books.filter(b =>
+        (b.name && b.name.toLowerCase().includes(kw)) ||
+        (b.username && b.username.toLowerCase().includes(kw)) ||
+        (b.levelname && b.levelname.toLowerCase().includes(kw)) ||
+        (b.desc && b.desc.toLowerCase().includes(kw))
+    );
+}
+
+function renderBookSearchResults(results, keyword) {
+    const listEl = document.getElementById('book-search-results');
+    if (!listEl) return;
+
+    if (!keyword || !keyword.trim()) {
+        listEl.innerHTML = '<li style="color: #999; padding: 6px 0;">输入关键词搜索棋书...</li>';
+        return;
+    }
+
+    if (results.length === 0) {
+        listEl.innerHTML = `<li style="color: #999; padding: 6px 0;">未找到匹配"${keyword}"的棋书</li>`;
+        return;
+    }
+
+    listEl.innerHTML = '';
+    const countInfo = document.createElement('li');
+    countInfo.style.cssText = 'color: #666; padding: 4px 0; font-size: 11px; border-bottom: 1px solid #eee;';
+    countInfo.textContent = `找到 ${results.length} 本棋书`;
+    listEl.appendChild(countInfo);
+
+    const maxShow = 50;
+    results.slice(0, maxShow).forEach(b => {
+        const li = document.createElement('li');
+        li.className = 'book-result-item';
+        const descSnippet = b.shortdesc ? b.shortdesc.substring(0, 30) : '';
+        li.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <a href="https://www.101weiqi.cn/book/${b.id}/" target="_blank"
+                   style="color:#2563eb; text-decoration:none; font-weight:bold; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                    ${b.name}
+                </a>
+                <span style="color:#666; font-size:11px; min-width:40px; text-align:right;">${b.levelname}</span>
+            </div>
+            <div style="font-size:11px; color:#999; margin-top:2px;">
+                ${b.qcount}题 · ${b.username}${descSnippet ? ' · ' + descSnippet : ''}
+            </div>
+        `;
+        listEl.appendChild(li);
+    });
+
+    if (results.length > maxShow) {
+        const more = document.createElement('li');
+        more.style.cssText = 'color: #999; padding: 4px 0; font-size: 11px; text-align: center;';
+        more.textContent = `还有 ${results.length - maxShow} 本未显示，请输入更精确的关键词`;
+        listEl.appendChild(more);
+    }
 }
 
 

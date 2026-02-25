@@ -10,14 +10,13 @@
 *   **无缝切题支持**：引入严格的状态机锁机制（`PENDING`/`READY`），完美解决快速切题时可能出现的“脏读”和状态残留问题。
 *   **零延迟响应**：利用 `Alpine.effect` 监听器，在用户落子的毫秒级瞬间捕获状态变化，即使遇到“首步错误瞬间回退”的极端情况也能完美处理。
 *   **多模式兼容**：智能识别并兼容 101 围棋网原生的“做题模式”与“浏览模式”，通过多级优先级（`taskinfo.result` > `duizhanResult`）确保判定逻辑的鲁棒性。
+*   **自定义做题模式**：支持限时挑战、本地答题统计（正确率 / 错题本）、模式自由切换，全程本地化，无需会员。
+*   **错题本**：使用 IndexedDB 持久化存储答题历史，记录每道题的答对/答错次数，并可一键查看或清空。
+*   **棋书搜索**：内置 367 本棋书的全文搜索，支持按书名、作者、难度、简介关键词检索，精准显示题数/难度，点击直达棋书页。
 
 ## 🚀 待开发功能 (Roadmap)
 
-*   **自定义做题模式**：
-    *   **限时挑战**：支持自定义每道题的思考时间，超时自动判错。
-    *   **本地数据统计**：记录并统计用户的答题历史（正确率、错题集等），即使不刷新页面也能保持状态连贯。
-    *   **模式自由切换**：提供 UI 开关，允许用户随时在“浏览模式”和“做题模式”之间无缝切换，且仅在做题模式下统计错题。
-*   **棋书模式**：基于自定义做题模式，进一步开发针对棋书的专属阅读与练习体验。
+*   **棋书专属练习模式**：基于自定义做题模式，进一步开发针对棋书的专属阅读与练习体验。
 
 ---
 
@@ -76,7 +75,95 @@ Alpine.effect(() => {
 3.  **第三优先级：`answerResult`**
     *   作为最后的后备判断依据。
 
-### 5. 防抖机制 (Debounce)
+### 5. 棋书搜索原理 (Book Search)
+
+#### 数据来源发现
+
+在尝试了多种方案（DataTable API、隐藏 iframe、bridge 脚本注入）均因 CSP 限制或内容脚本隔离失败后，通过直接抓取棋书列表页 HTML 源码发现了关键事实：
+
+> `https://www.101weiqi.cn/book/list/` 的 HTML 中**直接内嵌**了一个 JavaScript 变量 `var g_books = [...]`，包含全部 367 本棋书的完整数据。页面表格只是由 AngularJS + DataTable 在客户端渲染了这份数据而已。
+
+因此根本无需执行页面 JS，只需 `fetch()` 拿到 HTML 文本，用正则提取即可获得全量数据。
+
+#### 执行流程
+
+```
+用户点击"搜索"
+        │
+        ▼
+有内存缓存？ ──是──▶ 直接使用
+        │否
+        ▼
+检查 localStorage（24h TTL 内有效？）
+        │命中                  │过期 / 无缓存
+        ▼                     ▼
+   使用缓存        fetch('https://www.101weiqi.cn/book/list/')
+                              │
+                              ▼
+                    正则提取 var g_books = [...]
+                              │
+                              ▼
+                    JSON.parse() → 367 本棋书对象数组
+                              │
+                              ▼
+                    写入 localStorage（带时间戳）
+                              │
+                   ───────────┘
+                        │
+                        ▼
+          关键词过滤（名称 / 作者 / 难度 / 简介，不区分大小写）
+                        │
+                        ▼
+               渲染结果列表（最多显示 50 条）
+```
+
+#### 每本棋书的数据字段
+
+| 字段 | 说明 | 示例 |
+|------|------|------|
+| `id` | 棋书 ID，用于拼接 URL | `34103` |
+| `name` | 棋书名称 | `101启蒙吃子练习` |
+| `levelname` | 难度级别 | `15K+` |
+| `qcount` | 题目数量 | `510` |
+| `username` | 分享人 | `101小围` |
+| `desc` | 简介文本 | ... |
+
+棋书 URL 规则：`https://www.101weiqi.cn/book/{id}/`
+
+#### 关键代码
+
+```javascript
+// 1. fetch 页面 HTML，正则提取服务端内嵌的 JSON
+const resp = await fetch('https://www.101weiqi.cn/book/list/');
+const html = await resp.text();
+const match = html.match(/var\s+g_books\s*=\s*(\[[\s\S]*?\]);/);
+const books = JSON.parse(match[1]); // 367 本棋书
+
+// 2. 写入 localStorage 缓存（24h TTL）
+localStorage.setItem(BOOK_CACHE_KEY, JSON.stringify({
+    data: books,
+    timestamp: Date.now()
+}));
+
+// 3. 本地模糊搜索：书名 / 作者 / 难度 / 简介均参与匹配
+const kw = keyword.trim().toLowerCase();
+const results = books.filter(b =>
+    b.name?.toLowerCase().includes(kw) ||
+    b.username?.toLowerCase().includes(kw) ||
+    b.levelname?.toLowerCase().includes(kw) ||
+    b.desc?.toLowerCase().includes(kw)
+);
+```
+
+#### 为什么最终不需要 DataTable / iframe / inject.js
+
+- `g_books` 由服务端直接渲染进 HTML，是静态数据，不依赖任何客户端 JS 执行。
+- `content.js` 对同域发起的 `fetch` 天然可访问，无需额外 `host_permissions`。
+- 数据首次加载后完全本地化缓存，24h 内搜索零网络延迟。
+
+---
+
+### 6. 防抖机制 (Debounce)
 由于 `Alpine.effect` 会在数据变化的瞬间高频触发（例如落子时，步数和结果可能在几毫秒内连续变化两次），我们引入了 50ms 的防抖函数 (`debounce`)。这确保了在一次完整的交互动作（如落子并得到结果）完成后，只向 `content.js` 发送一次判定消息，避免了性能浪费和逻辑冲突。
 
 ---
@@ -113,3 +200,13 @@ Alpine.effect(() => {
 
 **新Bug记录**：如果在浏览模式下，正确情况下切到“试下”，再切回“对战”，系统会认为产生变化并错误地解开 pending 锁，导致误判为正确。
 *解决方案*：在出 pending 锁读取 `duizhanResult` 时，补充条件：如果 `simulatorDuizhanPts.length === 0`，则强制判定为错（返回 2）。因为如果步数为 0，说明用户根本没有在当前棋盘上进行有效落子，此时的 `duizhanResult` 变化是由于模式切换引起的虚假变化。
+
+棋书搜索功能：那现在就只用datatable来试试，写一个功能，在原有的外观上加一个搜索框，这个用DataTable来搜索书籍，搜索结果显示书名，URL这些基本信息，点一下可跳转对应棋书页面。该搜索结果在任意页面均准确无误，可不可以做到？
+
+**棋书搜索失败的4次尝试**（已记录，引以为戒）：
+1. `fetch()` 原始 HTML → 0 条结果（表格由 DataTable + AngularJS 动态渲染，静态 HTML 不含数据行）
+2. 隐藏 iframe + `iframe.contentWindow.jQuery` → 超时（内容脚本与 iframe 页面全局隔离，无法访问 iframe 的 jQuery/DataTable）
+3. 向 iframe 注入内联 `<script>` → CSP 阻止（`script-src` 策略不含 `unsafe-inline`）
+4. `datatable_bridge.js` 外部脚本 + postMessage → 仍超时（`event.source` 匹配问题，与 inject.js 注入时机冲突）
+
+**最终突破**：直接 `fetch` 棋书列表页 HTML，用正则提取其中服务端**直接内嵌**在 HTML 里的 `var g_books = [...]` 变量，无需执行任何页面 JS。全部 367 本棋书数据一次性获得，本地缓存后零延迟搜索。详见架构说明第 5 节。
