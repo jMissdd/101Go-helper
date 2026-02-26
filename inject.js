@@ -258,7 +258,7 @@
                             chapterId: parseInt(bookMatch[2]),
                             qid: parseInt(bookMatch[3]),
                         };
-                        // 从 window.nodedata 获取章节信息和题目序列
+                        // 从 window.nodedata 获取章节信息和题目序列（章节概览页才有）
                         if (window.nodedata && window.nodedata.pagedata) {
                             const pd = window.nodedata.pagedata;
                             bookContext.chapterName = pd.name || '';
@@ -271,9 +271,23 @@
                                 blackfirst: q.blackfirst, result: q.result,
                             }));
                         }
-                        // 从 window.bookdata 获取书名
+                        // 从 window.bookdata 获取书名（概览页才有）
                         if (window.bookdata && window.bookdata.name) {
                             bookContext.bookName = window.bookdata.name;
+                        }
+                        // 兜底：从页面面包屑 DOM 中提取书名和章节名
+                        // 题目页面的面包屑结构：<a href="/book/{bookId}/">书名</a> / <a href="/book/{bookId}/{chapterId}/">章节名</a>
+                        if (!bookContext.bookName) {
+                            const bookLink = document.querySelector(
+                                `a[href="/book/${bookContext.bookId}/"]`
+                            );
+                            if (bookLink) bookContext.bookName = bookLink.textContent.trim();
+                        }
+                        if (!bookContext.chapterName) {
+                            const chapterLink = document.querySelector(
+                                `a[href="/book/${bookContext.bookId}/${bookContext.chapterId}/"]`
+                            );
+                            if (chapterLink) bookContext.chapterName = chapterLink.textContent.trim();
                         }
                     }
 
