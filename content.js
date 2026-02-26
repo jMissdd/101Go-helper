@@ -9,7 +9,7 @@ s.onload = function() { this.remove(); };
 const MODE_KEY = 'weiqi_helper_mode';
 const LIMIT_KEY = 'weiqi_helper_time_limit_sec';
 
-let helperMode = localStorage.getItem(MODE_KEY) || 'browse'; // browse | practice
+let helperMode = localStorage.getItem(MODE_KEY) || 'browse'; // browse | practice | book
 let practiceTimeLimitSec = parseInt(localStorage.getItem(LIMIT_KEY) || '60', 10);
 if (!Number.isFinite(practiceTimeLimitSec) || practiceTimeLimitSec < 5) practiceTimeLimitSec = 60;
 
@@ -83,6 +83,7 @@ function createPanel() {
                     <select id="helper-mode" style="font-size:12px; padding:2px 6px;">
                         <option value="browse">浏览模式</option>
                         <option value="practice">做题模式</option>
+                        <option value="book">棋书练习</option>
                     </select>
                 </div>
                 <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
@@ -101,6 +102,26 @@ function createPanel() {
                     <li style="color: #666;">加载中...</li>
                 </ul>
                 <button id="btn-clear-errors" style="margin-top: 10px; font-size: 11px; padding: 2px 5px; cursor: pointer;">清空错题本</button>
+            </div>
+
+            <div id="book-practice-area" style="display:none; margin-top:10px; border:1px solid #8b5cf6; border-radius:6px; padding:8px; background:#faf5ff;">
+                <div style="font-weight:bold; font-size:12px; color:#7c3aed; margin-bottom:6px;">📘 棋书练习</div>
+                <div id="book-info" style="font-size:11px; color:#6b7280; margin-bottom:4px;"></div>
+                <div id="book-progress-bar" style="margin-bottom:6px;">
+                    <div style="background:#e5e7eb; border-radius:3px; height:6px; overflow:hidden;">
+                        <div id="book-progress-fill" style="background:#8b5cf6; height:100%; width:0%; transition:width 0.3s;"></div>
+                    </div>
+                    <div id="book-progress-text" style="font-size:11px; color:#6b7280; margin-top:2px;"></div>
+                </div>
+                <div id="book-stats" style="font-size:11px; color:#4b5563; margin-bottom:6px;"></div>
+                <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                    <button id="btn-book-prev" class="helper-btn book-nav-btn" style="flex:1; margin:0; padding:4px; font-size:11px;">⬅ 上一题</button>
+                    <button id="btn-book-next" class="helper-btn book-nav-btn" style="flex:1; margin:0; padding:4px; font-size:11px; background:#8b5cf6; color:white; border-color:#7c3aed;">下一题 ➡</button>
+                </div>
+                <div style="display:flex; gap:4px; margin-top:4px;">
+                    <button id="btn-book-wrong-only" class="helper-btn book-nav-btn" style="flex:1; margin:0; padding:4px; font-size:11px;">🔴 仅错题</button>
+                    <button id="btn-book-reset" class="helper-btn book-nav-btn" style="flex:1; margin:0; padding:4px; font-size:11px;">🔄 重置本章</button>
+                </div>
             </div>
 
             <div id="book-search-area" style="margin-top:10px; border-top: 1px solid #e5e7eb; padding-top: 10px;">
@@ -206,20 +227,59 @@ function createPanel() {
         if (e.key === 'Enter') doBookSearch();
     });
 
+    // 棋书练习按钮绑定
+    panel.querySelector('#btn-book-next').addEventListener('click', () => {
+        const nextQid = getNextBookQid();
+        if (nextQid) goToBookQuestion(nextQid);
+        else alert('已是本章最后一题（或无更多错题）');
+    });
+    panel.querySelector('#btn-book-prev').addEventListener('click', () => {
+        const prevQid = getPrevBookQid();
+        if (prevQid) goToBookQuestion(prevQid);
+        else alert('已是本章第一题');
+    });
+    panel.querySelector('#btn-book-wrong-only').addEventListener('click', () => {
+        bookWrongOnly = !bookWrongOnly;
+        const btn = panel.querySelector('#btn-book-wrong-only');
+        btn.textContent = bookWrongOnly ? '📋 全部题目' : '🔴 仅错题';
+        btn.style.background = bookWrongOnly ? '#ef4444' : '';
+        btn.style.color = bookWrongOnly ? 'white' : '';
+        if (bookProgress) {
+            bookProgress.wrongOnly = bookWrongOnly;
+            if (bookContext) saveBookProgress(bookContext.bookId, bookContext.chapterId, bookProgress);
+        }
+    });
+    panel.querySelector('#btn-book-reset').addEventListener('click', () => {
+        if (!bookContext) return;
+        if (!confirm(`确定重置「${bookContext.bookName || '本章'}」的做题进度吗？`)) return;
+        bookProgress = {
+            doneMap: {},
+            stats: { total: bookChapterQs.length, done: 0, correct: 0, wrong: 0, timeoutWrong: 0, streak: 0 },
+            lastQid: null,
+            wrongOnly: false,
+        };
+        saveBookProgress(bookContext.bookId, bookContext.chapterId, bookProgress);
+        updateUI(0);
+    });
+
     const modeSelect = panel.querySelector('#helper-mode');
     const limitInput = panel.querySelector('#helper-time-limit');
     modeSelect.value = helperMode;
     limitInput.value = String(practiceTimeLimitSec);
 
     modeSelect.addEventListener('change', () => {
-        helperMode = modeSelect.value === 'practice' ? 'practice' : 'browse';
+        const val = modeSelect.value;
+        helperMode = (val === 'practice' || val === 'book') ? val : 'browse';
         localStorage.setItem(MODE_KEY, helperMode);
 
         if (helperMode === 'practice' && currentProblemId) {
             ensurePracticeState(currentProblemId, currentProblemData);
         }
-        if (helperMode === 'browse') {
+        if (helperMode === 'browse' || helperMode === 'book') {
             currentCountdownSec = null;
+        }
+        if (helperMode === 'book' && isOnBookQuestionPage()) {
+            initBookPractice();
         }
         updateUI(currentDisplayResult);
     });
@@ -415,6 +475,278 @@ async function renderErrorBook() {
 const BOOK_CACHE_KEY = 'weiqi_helper_book_cache';
 const BOOK_CACHE_TTL = 24 * 60 * 60 * 1000; // 24小时
 
+// ==========================================
+// 2.8 棋书练习模式
+// ==========================================
+const BOOK_PROGRESS_PREFIX = 'book_progress:';
+
+// 棋书上下文（当前页面是否在棋书题目页）
+let bookContext = null;
+// 当前章节完整题序列（跨页合并后）
+let bookChapterQs = [];
+// 当前章节进度对象
+let bookProgress = null;
+// 错题筛选开关
+let bookWrongOnly = false;
+
+/**
+ * 从 inject.js 传来的 bookContext 判断当前是否在棋书做题页
+ */
+function isOnBookQuestionPage() {
+    return bookContext && bookContext.bookId && bookContext.chapterId && bookContext.qid;
+}
+
+/**
+ * 获取进度存储 key
+ */
+function getBookProgressKey(bookId, chapterId) {
+    return `${BOOK_PROGRESS_PREFIX}${bookId}:${chapterId}`;
+}
+
+/**
+ * 加载棋书章节进度
+ */
+function loadBookProgress(bookId, chapterId) {
+    try {
+        const raw = localStorage.getItem(getBookProgressKey(bookId, chapterId));
+        if (raw) {
+            const p = JSON.parse(raw);
+            if (p && typeof p === 'object') return p;
+        }
+    } catch(e) {}
+    return {
+        doneMap: {},   // { [qid]: { status, reason, costSec, ts } }
+        stats: { total: 0, done: 0, correct: 0, wrong: 0, timeoutWrong: 0, streak: 0 },
+        lastQid: null,
+        wrongOnly: false,
+    };
+}
+
+/**
+ * 保存棋书章节进度
+ */
+function saveBookProgress(bookId, chapterId, progress) {
+    try {
+        localStorage.setItem(getBookProgressKey(bookId, chapterId), JSON.stringify(progress));
+    } catch(e) { console.error('【棋书】保存进度失败:', e); }
+}
+
+/**
+ * 录入一道题的结果到棋书进度
+ */
+function recordBookResult(qid, status, reason) {
+    if (!bookProgress || !bookContext) return;
+    const key = String(qid);
+    if (bookProgress.doneMap[key]) return; // 已锁存不覆盖
+
+    const entry = {
+        status: status, // 1=对, 2=错
+        reason: reason, // 'result' | 'timeout'
+        ts: Date.now(),
+    };
+    bookProgress.doneMap[key] = entry;
+
+    bookProgress.stats.done += 1;
+    if (status === 1) {
+        bookProgress.stats.correct += 1;
+        bookProgress.stats.streak += 1;
+    } else {
+        bookProgress.stats.wrong += 1;
+        bookProgress.stats.streak = 0;
+        if (reason === 'timeout') bookProgress.stats.timeoutWrong += 1;
+    }
+    bookProgress.lastQid = key;
+
+    saveBookProgress(bookContext.bookId, bookContext.chapterId, bookProgress);
+    console.log(`【棋书】Q-${qid} → ${status === 1 ? '对' : '错'}(${reason}), 完成${bookProgress.stats.done}/${bookProgress.stats.total}`);
+}
+
+/**
+ * 抓取章节完整题序列（跨页合并）
+ * 利用 fetch 解析每页 HTML 中的 var nodedata = {...} 提取 qs
+ */
+async function fetchChapterFullQs(bookId, chapterId) {
+    const cacheKey = `book_chapter_qs:${bookId}:${chapterId}`;
+    try {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Date.now() - parsed.ts < BOOK_CACHE_TTL && Array.isArray(parsed.qs) && parsed.qs.length > 0) {
+                console.log(`【棋书】缓存命中 ${parsed.qs.length} 题`);
+                return parsed.qs;
+            }
+        }
+    } catch(e) {}
+
+    let allQs = [];
+    try {
+        // 先抓第1页获取 maxpage
+        const url1 = `https://www.101weiqi.cn/book/${bookId}/${chapterId}/?page=1`;
+        const html1 = await fetch(url1).then(r => r.text());
+        const nd1 = extractNodedata(html1);
+        if (!nd1) return [];
+        allQs = allQs.concat(nd1.qs);
+        const maxpage = nd1.maxpage || 1;
+
+        // 并行抓取剩余页
+        if (maxpage > 1) {
+            const promises = [];
+            for (let p = 2; p <= maxpage; p++) {
+                const urlP = `https://www.101weiqi.cn/book/${bookId}/${chapterId}/?page=${p}`;
+                promises.push(fetch(urlP).then(r => r.text()).then(extractNodedata));
+            }
+            const pages = await Promise.all(promises);
+            pages.forEach(nd => { if (nd) allQs = allQs.concat(nd.qs); });
+        }
+
+        // 按 qindex 排序
+        allQs.sort((a, b) => a.qindex - b.qindex);
+
+        localStorage.setItem(cacheKey, JSON.stringify({ qs: allQs, ts: Date.now() }));
+        console.log(`【棋书】抓取完成 ${allQs.length} 题（${maxpage}页）`);
+    } catch(e) {
+        console.error('【棋书】抓取章节题序列失败:', e);
+    }
+    return allQs;
+}
+
+/**
+ * 从 HTML 中提取 nodedata.pagedata 的 qs 和 maxpage
+ */
+function extractNodedata(html) {
+    const match = html.match(/var\s+nodedata\s*=\s*(\{[\s\S]*?\});\s*(?:<\/script>|const |var |let )/);
+    if (!match) return null;
+    try {
+        const nd = JSON.parse(match[1]);
+        const pd = nd.pagedata || nd;
+        return {
+            maxpage: pd.maxpage || 1,
+            qs: (pd.qs || []).map(q => ({
+                qid: q.qid, publicid: q.publicid,
+                qindex: q.qindex, levelname: q.levelname,
+                blackfirst: q.blackfirst,
+            })),
+        };
+    } catch(e) { return null; }
+}
+
+/**
+ * 找到下一题的 qid（按序 or 仅错题）
+ */
+function getNextBookQid() {
+    if (!bookChapterQs.length || !bookContext) return null;
+    const currentQid = bookContext.qid;
+    const currentIdx = bookChapterQs.findIndex(q => q.qid === currentQid || q.publicid === currentQid);
+    
+    const candidates = bookWrongOnly
+        ? bookChapterQs.filter(q => {
+            const d = bookProgress && bookProgress.doneMap[String(q.qid)];
+            return d && d.status === 2;
+        })
+        : bookChapterQs;
+
+    if (candidates.length === 0) return null;
+
+    if (bookWrongOnly) {
+        // 仅错题模式：从当前位置之后找下一个错题，找不到就从头
+        const afterCurrent = candidates.filter(q => {
+            const idx = bookChapterQs.findIndex(x => x.qid === q.qid);
+            return idx > currentIdx;
+        });
+        return afterCurrent.length > 0 ? afterCurrent[0].qid : candidates[0].qid;
+    } else {
+        // 顺序模式：下一题
+        if (currentIdx < 0 || currentIdx >= bookChapterQs.length - 1) return null; // 已是最后一题
+        return bookChapterQs[currentIdx + 1].qid;
+    }
+}
+
+/**
+ * 找到上一题的 qid
+ */
+function getPrevBookQid() {
+    if (!bookChapterQs.length || !bookContext) return null;
+    const currentQid = bookContext.qid;
+    const currentIdx = bookChapterQs.findIndex(q => q.qid === currentQid || q.publicid === currentQid);
+    if (currentIdx <= 0) return null;
+    return bookChapterQs[currentIdx - 1].qid;
+}
+
+/**
+ * 跳转到一道棋书题目
+ */
+function goToBookQuestion(qid) {
+    if (!bookContext) return;
+    window.location.href = `https://www.101weiqi.cn/book/${bookContext.bookId}/${bookContext.chapterId}/${qid}/`;
+}
+
+/**
+ * 获取棋书练习统计文本
+ */
+function getBookStatsText() {
+    if (!bookProgress) return '';
+    const s = bookProgress.stats;
+    const accuracy = s.done > 0 ? Math.round((s.correct / s.done) * 100) : 0;
+    const total = s.total || bookChapterQs.length || '?';
+    return `📖 本章：${s.done}/${total} | 对${s.correct} 错${s.wrong}(超时${s.timeoutWrong}) | 连对${s.streak} | ${accuracy}%`;
+}
+
+/**
+ * 获取当前题在章节中的序号
+ */
+function getCurrentBookIndex() {
+    if (!bookChapterQs.length || !bookContext) return { current: 0, total: 0 };
+    const idx = bookChapterQs.findIndex(q => q.qid === bookContext.qid || q.publicid === bookContext.qid);
+    return { current: idx >= 0 ? idx + 1 : 0, total: bookChapterQs.length };
+}
+
+/**
+ * 初始化棋书练习：加载题序列 + 恢复进度
+ */
+async function initBookPractice() {
+    if (!isOnBookQuestionPage()) return;
+
+    const statusEl = document.getElementById('book-info');
+    if (statusEl) statusEl.textContent = '⏳ 正在加载章节题目...';
+
+    // 显示棋书练习区
+    const area = document.getElementById('book-practice-area');
+    if (area) area.style.display = 'block';
+
+    // 如果已有 inject.js 传来的当前页 qs 作为初始数据
+    if (bookContext.qs && bookContext.qs.length > 0 && bookChapterQs.length === 0) {
+        bookChapterQs = bookContext.qs;
+    }
+
+    // 异步抓取完整题序列
+    const fullQs = await fetchChapterFullQs(bookContext.bookId, bookContext.chapterId);
+    if (fullQs.length > 0) {
+        bookChapterQs = fullQs;
+    }
+
+    // 加载进度
+    bookProgress = loadBookProgress(bookContext.bookId, bookContext.chapterId);
+    bookProgress.stats.total = bookChapterQs.length;
+    bookWrongOnly = bookProgress.wrongOnly || false;
+
+    // 恢复仅错题按钮状态
+    const wrongBtn = document.getElementById('btn-book-wrong-only');
+    if (wrongBtn) {
+        wrongBtn.textContent = bookWrongOnly ? '📋 全部题目' : '🔴 仅错题';
+        wrongBtn.style.background = bookWrongOnly ? '#ef4444' : '';
+        wrongBtn.style.color = bookWrongOnly ? 'white' : '';
+    }
+
+    // 确保当前题记入 practiceSession
+    if (currentProblemId) {
+        ensurePracticeState(currentProblemId, currentProblemData);
+    }
+
+    saveBookProgress(bookContext.bookId, bookContext.chapterId, bookProgress);
+    updateUI(currentDisplayResult);
+    console.log(`【棋书】初始化完成: ${bookContext.bookName} / ${bookContext.chapterName}, ${bookChapterQs.length}题, 已完成${bookProgress.stats.done}`);
+}
+
 async function fetchBookList() {
     // 先检查 localStorage 缓存
     try {
@@ -540,7 +872,7 @@ async function lockPracticeResult(qid, result, reason) {
 }
 
 async function checkPracticeTimeoutForCurrent() {
-    if (helperMode !== 'practice' || !currentProblemId) return;
+    if ((helperMode !== 'practice' && helperMode !== 'book') || !currentProblemId) return;
     const state = ensurePracticeState(currentProblemId, currentProblemData);
     if (!state) return;
 
@@ -566,6 +898,16 @@ window.addEventListener("message", async function(event) {
     const answerResult = event.data.answerResult;
     const isNewResult = event.data.isNewResult;
     console.log("【助手】来源:", event.data.source, "| 结果:", answerResult, "| 新结果:", isNewResult);
+
+    // 更新棋书上下文
+    if (event.data.bookContext) {
+        bookContext = event.data.bookContext;
+        console.log("【棋书】上下文:", bookContext.bookName, '章节', bookContext.chapterId, '题', bookContext.qid);
+        // 自动初始化棋书练习（如果在棋书模式中）
+        if (helperMode === 'book' && isOnBookQuestionPage() && bookChapterQs.length === 0) {
+            initBookPractice();
+        }
+    }
     
     // 如果切题了，重新获取历史记录
     if (currentProblemData && currentProblemData.publicid !== currentProblemId) {
@@ -575,7 +917,24 @@ window.addEventListener("message", async function(event) {
 
     const incomingResult = (answerResult === null || answerResult === undefined) ? 0 : answerResult;
 
-    if (helperMode === 'practice' && currentProblemId) {
+    if (helperMode === 'book' && isOnBookQuestionPage() && currentProblemId) {
+        // 棋书练习模式：结果锁存到棋书进度
+        const state = ensurePracticeState(currentProblemId, currentProblemData);
+        if (state && !state.locked) {
+            if (incomingResult === 1 || incomingResult === 2) {
+                await lockPracticeResult(currentProblemId, incomingResult, 'result');
+                recordBookResult(currentProblemId, incomingResult, 'result');
+            } else {
+                await checkPracticeTimeoutForCurrent();
+                // 超时也录入棋书进度
+                if (state.locked && state.status === 2) {
+                    recordBookResult(currentProblemId, 2, 'timeout');
+                }
+            }
+        }
+        currentDisplayResult = state && state.locked ? state.status : incomingResult;
+        if (state && state.locked) currentCountdownSec = null;
+    } else if (helperMode === 'practice' && currentProblemId) {
         const state = ensurePracticeState(currentProblemId, currentProblemData);
         if (state && !state.locked) {
             if (incomingResult === 1 || incomingResult === 2) {
@@ -598,8 +957,17 @@ window.addEventListener("message", async function(event) {
 
 if (!practiceTimerHandle) {
     practiceTimerHandle = setInterval(async () => {
-        await checkPracticeTimeoutForCurrent();
-        if (helperMode === 'practice') updateUI(currentDisplayResult);
+        if (helperMode === 'practice' || helperMode === 'book') {
+            await checkPracticeTimeoutForCurrent();
+            // 棋书模式下超时也要录入棋书进度
+            if (helperMode === 'book' && currentProblemId) {
+                const state = practiceSession.byQid.get(String(currentProblemId));
+                if (state && state.locked && state.reason === 'timeout' && bookProgress) {
+                    recordBookResult(currentProblemId, 2, 'timeout');
+                }
+            }
+            updateUI(currentDisplayResult);
+        }
     }, 1000);
 }
 
@@ -610,8 +978,9 @@ function updateUI(answerResult) {
     const statusDiv = document.getElementById('helper-status');
     if (!statusDiv || !currentProblemData) return;
 
+    const modeLabels = { browse: '👀 浏览模式', practice: '📝 做题模式', book: '📘 棋书练习' };
     let statusHtml = `<span class="status-tag tag-success">数据捕获成功</span>`;
-    statusHtml += `<div style="margin-top:4px; font-size:12px; color:#374151;">当前模式：${helperMode === 'practice' ? '📝 做题模式' : '👀 浏览模式'}</div>`;
+    statusHtml += `<div style="margin-top:4px; font-size:12px; color:#374151;">当前模式：${modeLabels[helperMode] || helperMode}</div>`;
 
     if (currentProblemData.publicid) {
         statusHtml += `<div style="margin-top:4px; font-size:12px; color:#666;">题目 Q-${currentProblemData.publicid} | ${currentProblemData.levelname || ''} | ${currentProblemData.qtypename || ''}</div>`;
@@ -628,7 +997,7 @@ function updateUI(answerResult) {
         statusHtml += `<div style="margin-top:4px; font-weight:bold; color:#d97706;">⏳ 尚未作答</div>`;
     }
 
-    if (helperMode === 'practice') {
+    if (helperMode === 'practice' || helperMode === 'book') {
         const countdown = (currentCountdownSec === null) ? '--:--' : formatCountdown(currentCountdownSec);
         statusHtml += `<div style="margin-top:6px; font-size:12px; color:#111827;">⏱️ 本题限时：${practiceTimeLimitSec}s | 剩余：${countdown}</div>`;
     }
@@ -643,6 +1012,31 @@ function updateUI(answerResult) {
     }
 
     statusDiv.innerHTML = statusHtml;
+
+    // 棋书练习区渲染
+    const bookArea = document.getElementById('book-practice-area');
+    if (bookArea) {
+        if (helperMode === 'book' && isOnBookQuestionPage()) {
+            bookArea.style.display = 'block';
+            const infoEl = document.getElementById('book-info');
+            const statsEl = document.getElementById('book-stats');
+            const progressFill = document.getElementById('book-progress-fill');
+            const progressText = document.getElementById('book-progress-text');
+
+            if (infoEl && bookContext) {
+                const pos = getCurrentBookIndex();
+                infoEl.textContent = `📘 ${bookContext.bookName || '棋书'} / ${bookContext.chapterName || '章节'} — 第${pos.current}/${pos.total}题`;
+            }
+            if (statsEl) statsEl.textContent = getBookStatsText();
+            if (progressFill && progressText && bookProgress) {
+                const pct = bookProgress.stats.total > 0 ? Math.round((bookProgress.stats.done / bookProgress.stats.total) * 100) : 0;
+                progressFill.style.width = pct + '%';
+                progressText.textContent = `进度 ${pct}%（${bookProgress.stats.done}/${bookProgress.stats.total}）`;
+            }
+        } else {
+            bookArea.style.display = 'none';
+        }
+    }
 
     const statsDiv = document.getElementById('practice-stats');
     if (statsDiv) {

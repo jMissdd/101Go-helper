@@ -48,11 +48,16 @@
                         return;
                     }
 
-                    // 【终极解锁方案】：只要 Alpine 监听到任何相关数据的变化，
-                    // 说明用户必然在当前棋盘进行了交互（哪怕是瞬间被回滚的错误落子）。
-                    // 此时无条件砸碎 PENDING 锁！
+                    // 【解锁方案 v2】：检测到数据变化时，需排除切题 settle 导致的假信号。
+                    // PENDING 设置后 800ms 内为保护期，不解锁（Alpine store settle 通常 < 300ms）。
+                    // 用户真正的首手落子必然在 800ms 之后，此时解锁安全。
                     if (window._problemState === 'PENDING') {
-                        console.log(`%c[WATCHER] 捕获到数据变化(dr=${dr}, ptsLen=${ptsLen})，无条件解除 PENDING 锁！`, 'color: #f59e0b; font-weight: bold;');
+                        const elapsed = Date.now() - (window._pendingSetTime || 0);
+                        if (elapsed < 800) {
+                            console.log(`%c[WATCHER] PENDING 保护期(${elapsed}ms < 800ms)，忽略数据变化(dr=${dr}, ptsLen=${ptsLen})`, 'color: #9ca3af');
+                            return; // 保护期内不解锁，也不触发 scan
+                        }
+                        console.log(`%c[WATCHER] 保护期已过(${elapsed}ms)，解除 PENDING 锁(dr=${dr}, ptsLen=${ptsLen})`, 'color: #f59e0b; font-weight: bold;');
                         window._problemState = 'READY';
                     }
 
@@ -101,13 +106,19 @@
                     console.log(tag + ' Alpine store 快照:', dump);
 
                     // 【最高优先级：破壁人 taskinfo.result】
-                    // 如果 taskinfo.result 已经明确是 1 或 2，直接采信，无视任何锁！
+                    // 如果 taskinfo.result 已经明确是 1 或 2，直接采信——但在 PENDING 保护期内
+                    // 不信任（可能是上一题的残留值）。
                     if (store.taskinfo && typeof store.taskinfo.result !== 'undefined') {
                         let r = check(store.taskinfo.result);
                         if (r === 1 || r === 2) {
-                            console.log(tag + ' [破壁] 结果来源: taskinfo.result =', r);
-                            window._problemState = 'READY'; // 强行解锁
-                            return r;
+                            const pendingElapsed = Date.now() - (window._pendingSetTime || 0);
+                            if (window._problemState === 'PENDING' && pendingElapsed < 800) {
+                                console.log(tag + ' [破壁] taskinfo.result=' + r + ' 但在 PENDING 保护期内(' + pendingElapsed + 'ms)，忽略');
+                            } else {
+                                console.log(tag + ' [破壁] 结果来源: taskinfo.result =', r);
+                                window._problemState = 'READY'; // 强行解锁
+                                return r;
+                            }
                         }
                     }
 
@@ -188,6 +199,7 @@
                 if (isNewProblem || isFirstLoad) {
                     window._problemResultCache = {}; // 切题或刷新时清空缓存
                     window._problemState = 'PENDING'; // 【状态机】：切题后进入 PENDING 锁状态，必须看到首手动作才解锁
+                    window._pendingSetTime = Date.now(); // 记录 PENDING 设置时间，用于保护期判断
                     window._initialPtsLength = 0;
                     try {
                         if (typeof Alpine !== 'undefined') {
@@ -237,12 +249,41 @@
                         plainVal = window[name]; // 深拷贝失败时回退到原始全局变量
                     }
                     
+                    // 棋书上下文：从 URL 和页面全局变量中提取
+                    let bookContext = null;
+                    const bookMatch = window.location.pathname.match(/^\/book\/(\d+)\/(\d+)\/(\d+)\/?/);
+                    if (bookMatch) {
+                        bookContext = {
+                            bookId: parseInt(bookMatch[1]),
+                            chapterId: parseInt(bookMatch[2]),
+                            qid: parseInt(bookMatch[3]),
+                        };
+                        // 从 window.nodedata 获取章节信息和题目序列
+                        if (window.nodedata && window.nodedata.pagedata) {
+                            const pd = window.nodedata.pagedata;
+                            bookContext.chapterName = pd.name || '';
+                            bookContext.nodecount = pd.nodecount || 0;
+                            bookContext.page = pd.page || 1;
+                            bookContext.maxpage = pd.maxpage || 1;
+                            bookContext.qs = (pd.qs || []).map(q => ({
+                                qid: q.qid, publicid: q.publicid,
+                                qindex: q.qindex, levelname: q.levelname,
+                                blackfirst: q.blackfirst, result: q.result,
+                            }));
+                        }
+                        // 从 window.bookdata 获取书名
+                        if (window.bookdata && window.bookdata.name) {
+                            bookContext.bookName = window.bookdata.name;
+                        }
+                    }
+
                     window.postMessage({
                         type: "101_GAME_DATA",
                         source: "GLOBAL_" + name,
                         data: plainVal,
                         answerResult: answerResult,
-                        isNewResult: isNewResult
+                        isNewResult: isNewResult,
+                        bookContext: bookContext
                     }, "*");
                 }
                 
