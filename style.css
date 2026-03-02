@@ -86,3 +86,39 @@
 }
 .tag-success { background-color: #d1fae5; color: #065f46; }
 .tag-wait { background-color: #fffbeb; color: #92400e; }
+
+/* 棋书搜索结果 */
+.book-result-item {
+    padding: 6px 0;
+    border-bottom: 1px dashed #eee;
+    transition: background-color 0.15s;
+}
+.book-result-item:hover {
+    background-color: #f0f7ff;
+}
+#book-search-input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+/* 棋书练习模式 */
+.book-nav-btn {
+    transition: background-color 0.15s, transform 0.1s;
+}
+.book-nav-btn:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+}
+.book-nav-btn:active {
+    transform: translateY(0);
+}
+#book-practice-area {
+    animation: bookFadeIn 0.25s ease;
+}
+@keyframes bookFadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+#book-progress-fill {
+    transition: width 0.3s ease;
+}
