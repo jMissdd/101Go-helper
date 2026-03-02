@@ -13,7 +13,7 @@
 *   **自定义做题模式**：支持限时挑战、本地答题统计（正确率 / 错题本）、模式自由切换，全程本地化，无需会员。
 *   **错题本**：使用 IndexedDB 持久化存储答题历史，记录每道题的答对/答错次数，并可一键查看或清空。
 *   **棋书搜索**：内置 367 本棋书的全文搜索，支持按书名、作者、难度、简介关键词检索，精准显示题数/难度，点击直达棋书页。
-*   **棋书专属练习模式**：在棋书题目页自动识别棋书/章节/题目上下文，支持章节内按序/仅错题导航、进度持久化（localStorage）、本章统计、连对计数、章节重置，面板实时显示书名、章节名、进度条。
+*   **棋书专属练习模式**：在棋书题目页自动识别棋书/章节/题目上下文，支持章节内按序/仅错题导航、进度持久化（localStorage）、本章统计、连对计数、章节重置，面板实时显示书名、章节名、进度条。仅错题模式下上/下翻题均只在错题列表内循环，`doneMap` 的 key 统一使用 `publicid` 确保与录入时完全一致。
 
 ---
 
@@ -213,3 +213,17 @@ const results = books.filter(b =>
 4. `datatable_bridge.js` 外部脚本 + postMessage → 仍超时（`event.source` 匹配问题，与 inject.js 注入时机冲突）
 
 **最终突破**：直接 `fetch` 棋书列表页 HTML，用正则提取其中服务端**直接内嵌**在 HTML 里的 `var g_books = [...]` 变量，无需执行任何页面 JS。全部 367 本棋书数据一次性获得，本地缓存后零延迟搜索。详见架构说明第 5 节。
+
+**Bug 修复（book 分支）：仅错题模式无法过滤出任何错题**
+根本原因：`getNextBookQid` 里过滤 `doneMap` 时用的是 `String(q.qid)`，而 `recordBookResult` 写入 key 用的是 `currentProblemId`（即 `publicid`），两个字段不同，导致永远匹配不上。
+修复方案：新增 `getBookQKey(q)` 辅助函数，统一使用 `publicid` 优先、`qid` 兜底的 key，`getNextBookQid` / `getPrevBookQid` 均改用此函数。
+
+**Bug 修复（book 分支）：`getPrevBookQid` 不支持仅错题模式**
+原实现在仅错题模式下仍从全序列取前一题。修复后，`getPrevBookQid` 与 `getNextBookQid` 对称支持 `bookWrongOnly`，在错题列表内向前循环。
+
+---
+
+## 🚀 下一步计划 (Roadmap)
+
+*   **自动切换棋书模式**：进入棋书题目页时（URL 匹配 `/book/{bid}/{cid}/{qid}/`）自动将 `helperMode` 切换为 `book`，无需手动选择。
+*   **合并 `book` → `master`**：QA 通过后提 PR 合并主线。

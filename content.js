@@ -230,13 +230,33 @@ function createPanel() {
     // 棋书练习按钮绑定
     panel.querySelector('#btn-book-next').addEventListener('click', () => {
         const nextQid = getNextBookQid();
-        if (nextQid) goToBookQuestion(nextQid);
-        else alert('已是本章最后一题（或无更多错题）');
+        if (nextQid) {
+            goToBookQuestion(nextQid);
+        } else if (bookWrongOnly) {
+            const wrongCount = bookProgress ? Object.values(bookProgress.doneMap).filter(d => d.status === 2).length : 0;
+            if (wrongCount === 0) {
+                alert('当前章节还没有错题记录，先做几道题吧！');
+            } else {
+                alert('仅错题模式：已是最后一道错题（共 ' + wrongCount + ' 题）');
+            }
+        } else {
+            alert('已是本章最后一题');
+        }
     });
     panel.querySelector('#btn-book-prev').addEventListener('click', () => {
         const prevQid = getPrevBookQid();
-        if (prevQid) goToBookQuestion(prevQid);
-        else alert('已是本章第一题');
+        if (prevQid) {
+            goToBookQuestion(prevQid);
+        } else if (bookWrongOnly) {
+            const wrongCount = bookProgress ? Object.values(bookProgress.doneMap).filter(d => d.status === 2).length : 0;
+            if (wrongCount === 0) {
+                alert('当前章节还没有错题记录，先做几道题吧！');
+            } else {
+                alert('仅错题模式：已是第一道错题（共 ' + wrongCount + ' 题）');
+            }
+        } else {
+            alert('已是本章第一题');
+        }
     });
     panel.querySelector('#btn-book-wrong-only').addEventListener('click', () => {
         bookWrongOnly = !bookWrongOnly;
@@ -633,43 +653,66 @@ function extractNodedata(html) {
 /**
  * 找到下一题的 qid（按序 or 仅错题）
  */
+/**
+ * 获取 doneMap 中用于查找的 key（优先用 publicid，fallback 到 qid）
+ */
+function getBookQKey(q) {
+    return String(q.publicid || q.qid);
+}
+
 function getNextBookQid() {
     if (!bookChapterQs.length || !bookContext) return null;
     const currentQid = bookContext.qid;
     const currentIdx = bookChapterQs.findIndex(q => q.qid === currentQid || q.publicid === currentQid);
-    
-    const candidates = bookWrongOnly
-        ? bookChapterQs.filter(q => {
-            const d = bookProgress && bookProgress.doneMap[String(q.qid)];
-            return d && d.status === 2;
-        })
-        : bookChapterQs;
-
-    if (candidates.length === 0) return null;
 
     if (bookWrongOnly) {
-        // 仅错题模式：从当前位置之后找下一个错题，找不到就从头
-        const afterCurrent = candidates.filter(q => {
-            const idx = bookChapterQs.findIndex(x => x.qid === q.qid);
+        // 仅错题模式：从 doneMap 中找 status===2 的题，key 与 recordBookResult 保持一致（publicid优先）
+        const wrongQs = bookChapterQs.filter(q => {
+            const d = bookProgress && bookProgress.doneMap[getBookQKey(q)];
+            return d && d.status === 2;
+        });
+        if (wrongQs.length === 0) return null; // 无错题
+        // 从当前位置之后找下一个错题，找不到就从头循环
+        const afterCurrent = wrongQs.filter(q => {
+            const idx = bookChapterQs.findIndex(x => x.qid === q.qid || x.publicid === q.publicid);
             return idx > currentIdx;
         });
-        return afterCurrent.length > 0 ? afterCurrent[0].qid : candidates[0].qid;
+        const target = afterCurrent.length > 0 ? afterCurrent[0] : wrongQs[0];
+        return target.qid || target.publicid;
     } else {
         // 顺序模式：下一题
-        if (currentIdx < 0 || currentIdx >= bookChapterQs.length - 1) return null; // 已是最后一题
-        return bookChapterQs[currentIdx + 1].qid;
+        if (currentIdx < 0 || currentIdx >= bookChapterQs.length - 1) return null;
+        const next = bookChapterQs[currentIdx + 1];
+        return next.qid || next.publicid;
     }
 }
 
 /**
- * 找到上一题的 qid
+ * 找到上一题的 qid（支持 bookWrongOnly）
  */
 function getPrevBookQid() {
     if (!bookChapterQs.length || !bookContext) return null;
     const currentQid = bookContext.qid;
     const currentIdx = bookChapterQs.findIndex(q => q.qid === currentQid || q.publicid === currentQid);
-    if (currentIdx <= 0) return null;
-    return bookChapterQs[currentIdx - 1].qid;
+
+    if (bookWrongOnly) {
+        // 仅错题模式：从当前位置之前找上一个错题，找不到就从末尾循环
+        const wrongQs = bookChapterQs.filter(q => {
+            const d = bookProgress && bookProgress.doneMap[getBookQKey(q)];
+            return d && d.status === 2;
+        });
+        if (wrongQs.length === 0) return null;
+        const beforeCurrent = wrongQs.filter(q => {
+            const idx = bookChapterQs.findIndex(x => x.qid === q.qid || x.publicid === q.publicid);
+            return idx < currentIdx;
+        });
+        const target = beforeCurrent.length > 0 ? beforeCurrent[beforeCurrent.length - 1] : wrongQs[wrongQs.length - 1];
+        return target.qid || target.publicid;
+    } else {
+        if (currentIdx <= 0) return null;
+        const prev = bookChapterQs[currentIdx - 1];
+        return prev.qid || prev.publicid;
+    }
 }
 
 /**
@@ -688,7 +731,13 @@ function getBookStatsText() {
     const s = bookProgress.stats;
     const accuracy = s.done > 0 ? Math.round((s.correct / s.done) * 100) : 0;
     const total = s.total || bookChapterQs.length || '?';
-    return `📖 本章：${s.done}/${total} | 对${s.correct} 错${s.wrong}(超时${s.timeoutWrong}) | 连对${s.streak} | ${accuracy}%`;
+    let base = `📖 本章：${s.done}/${total} | 对${s.correct} 错${s.wrong}(超时${s.timeoutWrong}) | 连对${s.streak} | ${accuracy}%`;
+    if (bookWrongOnly) {
+        // 计算当前 doneMap 中的错题数量
+        const wrongCount = Object.values(bookProgress.doneMap).filter(d => d.status === 2).length;
+        base += `\n🔴 仅错题模式：共 ${wrongCount} 道错题待刷`;
+    }
+    return base;
 }
 
 /**
