@@ -26,6 +26,7 @@ const practiceSession = {
 let currentDisplayResult = 0;
 let currentCountdownSec = null;
 let practiceTimerHandle = null;
+let currentErrorFilter = 'needReview';
 
 function ensurePracticeState(qid, problemData) {
     if (!qid) return null;
@@ -95,13 +96,27 @@ function createPanel() {
             <div id="practice-stats" class="helper-info-block" style="display:none; margin-top:8px;"></div>
             
             <button id="btn-show-errors" class="helper-btn" style="background-color: #f59e0b; color: white; border: none;">📚 查看错题本</button>
-            
-            <div id="error-book-area" style="display:none; margin-top:10px; max-height: 200px; overflow-y: auto; border-top: 1px solid #eee; padding-top: 10px;">
-                <div style="font-weight: bold; margin-bottom: 5px;">我的错题本</div>
-                <ul id="error-list" style="list-style: none; padding: 0; margin: 0; font-size: 12px;">
-                    <li style="color: #666;">加载中...</li>
+
+            <div id="error-book-area" class="error-book-area" style="display:none;">
+                <div class="error-book-header">
+                    <div>
+                        <div class="error-book-title">错题本</div>
+                        <div class="error-book-subtitle">仅做题模式下，错题重刷做对后会自动移出待复习列表</div>
+                    </div>
+                    <button id="btn-clear-errors" class="helper-btn error-clear-btn">清空</button>
+                </div>
+
+                <div id="error-book-summary" class="error-book-summary"></div>
+
+                <div class="error-book-toolbar">
+                    <button id="btn-error-filter-review" class="helper-btn error-filter-btn active">待复习</button>
+                    <button id="btn-error-filter-all" class="helper-btn error-filter-btn">全部</button>
+                    <button id="btn-error-filter-resolved" class="helper-btn error-filter-btn">已刷回</button>
+                </div>
+
+                <ul id="error-list" class="error-book-list">
+                    <li class="error-book-empty">加载中...</li>
                 </ul>
-                <button id="btn-clear-errors" style="margin-top: 10px; font-size: 11px; padding: 2px 5px; cursor: pointer;">清空错题本</button>
             </div>
 
             <div id="book-practice-area" style="display:none; margin-top:10px; border:1px solid #8b5cf6; border-radius:6px; padding:8px; background:#faf5ff;">
@@ -186,18 +201,39 @@ function createPanel() {
         const area = document.getElementById('error-book-area');
         if (area.style.display === 'none') {
             area.style.display = 'block';
-            renderErrorBook();
+            panel.querySelector('#btn-show-errors').textContent = '📚 收起错题本';
+            renderErrorBook(currentErrorFilter);
         } else {
             area.style.display = 'none';
+            panel.querySelector('#btn-show-errors').textContent = '📚 查看错题本';
         }
     });
     
     // 绑定清空错题本按钮
     panel.querySelector('#btn-clear-errors').addEventListener('click', () => {
         if (confirm('确定要清空所有错题记录吗？')) {
-            clearErrorBook().then(() => renderErrorBook());
+            clearErrorBook().then(() => renderErrorBook(currentErrorFilter));
         }
     });
+
+    const errorFilterReviewBtn = panel.querySelector('#btn-error-filter-review');
+    const errorFilterAllBtn = panel.querySelector('#btn-error-filter-all');
+    const errorFilterResolvedBtn = panel.querySelector('#btn-error-filter-resolved');
+
+    function setErrorFilter(filter) {
+        currentErrorFilter = filter;
+        [errorFilterReviewBtn, errorFilterAllBtn, errorFilterResolvedBtn].forEach(btn => {
+            btn.classList.remove('active');
+        });
+        if (filter === 'needReview') errorFilterReviewBtn.classList.add('active');
+        if (filter === 'all') errorFilterAllBtn.classList.add('active');
+        if (filter === 'resolved') errorFilterResolvedBtn.classList.add('active');
+        renderErrorBook(filter);
+    }
+
+    errorFilterReviewBtn.addEventListener('click', () => setErrorFilter('needReview'));
+    errorFilterAllBtn.addEventListener('click', () => setErrorFilter('all'));
+    errorFilterResolvedBtn.addEventListener('click', () => setErrorFilter('resolved'));
 
     // 棋书搜索绑定
     let _bookListCache = null;
@@ -340,6 +376,35 @@ function getCurrentPracticeStatsText() {
 const DB_NAME = '101WeiqiHelperDB';
 const STORE_NAME = 'error_book';
 
+function getDifficultyRank(levelname) {
+    if (!levelname) return 9999;
+    const text = String(levelname).toUpperCase().trim();
+
+    const kMatch = text.match(/^(\d+)\s*K\+?$/);
+    if (kMatch) return 1000 + parseInt(kMatch[1], 10);
+
+    const dMatch = text.match(/^(\d+)\s*D\+?$/);
+    if (dMatch) return 500 - parseInt(dMatch[1], 10);
+
+    return 9999;
+}
+
+function groupErrorsByDifficulty(errors) {
+    const groups = {};
+    errors.forEach((item) => {
+        const key = item.levelname || '未标注难度';
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(item);
+    });
+
+    return Object.entries(groups)
+        .sort((a, b) => getDifficultyRank(a[0]) - getDifficultyRank(b[0]))
+        .map(([level, items]) => ({
+            level,
+            items: items.sort((x, y) => (y.timestamp || 0) - (x.timestamp || 0)),
+        }));
+}
+
 function initDB() {
     return new Promise((resolve, reject) => {
         const request = indexedDB.open(DB_NAME, 1);
@@ -356,47 +421,65 @@ function initDB() {
     });
 }
 
-async function saveProblemHistory(problemData, isCorrect = false) {
+async function saveProblemHistory(problemData, isCorrect = false, options = {}) {
     if (!problemData || !problemData.publicid) return;
-    
+
+    const mode = options.mode || helperMode || 'browse';
+    const qid = problemData.publicid;
+
     try {
         const db = await initDB();
         const tx = db.transaction(STORE_NAME, 'readwrite');
         const store = tx.objectStore(STORE_NAME);
-        
-        const qid = problemData.publicid;
-        
-        // 先查询是否已存在
-        const getReq = store.get(qid);
-        getReq.onsuccess = () => {
-            let record = getReq.result;
-            if (record) {
-                // 更新次数和时间
-                if (isCorrect) {
-                    record.correctCount = (record.correctCount || 0) + 1;
-                } else {
-                    record.errorCount = (record.errorCount || 0) + 1;
-                }
-                record.timestamp = Date.now();
-                store.put(record);
-                console.log(`【历史记录】更新 Q-${qid}，对:${record.correctCount || 0} 错:${record.errorCount || 0}`);
-            } else {
-                // 新增记录
-                record = {
-                    qid: qid,
-                    title: problemData.title || '',
-                    desc: problemData.desc || '',
-                    levelname: problemData.levelname || '',
-                    qtypename: problemData.qtypename || '',
-                    errorCount: isCorrect ? 0 : 1,
-                    correctCount: isCorrect ? 1 : 0,
-                    timestamp: Date.now(),
-                    url: window.location.href
-                };
-                store.add(record);
-                console.log(`【历史记录】新增 Q-${qid}，对:${record.correctCount} 错:${record.errorCount}`);
-            }
+
+        const existing = await new Promise((resolve) => {
+            const req = store.get(qid);
+            req.onsuccess = () => resolve(req.result || null);
+            req.onerror = () => resolve(null);
+        });
+
+        const now = Date.now();
+        const record = existing || {
+            qid: qid,
+            title: problemData.title || '',
+            desc: problemData.desc || '',
+            levelname: problemData.levelname || '',
+            qtypename: problemData.qtypename || '',
+            errorCount: 0,
+            correctCount: 0,
+            timestamp: now,
+            url: window.location.href,
+            needReview: false,
+            lastResult: null,
+            lastMode: mode,
+            lastReviewAt: null,
         };
+
+        record.title = problemData.title || record.title || '';
+        record.desc = problemData.desc || record.desc || '';
+        record.levelname = problemData.levelname || record.levelname || '';
+        record.qtypename = problemData.qtypename || record.qtypename || '';
+        record.url = window.location.href;
+        record.timestamp = now;
+        record.lastMode = mode;
+
+        if (isCorrect) {
+            record.correctCount = (record.correctCount || 0) + 1;
+            record.lastResult = 'correct';
+
+            if (mode === 'practice' && (record.errorCount || 0) > 0) {
+                record.needReview = false;
+                record.lastReviewAt = now;
+            }
+        } else {
+            record.errorCount = (record.errorCount || 0) + 1;
+            record.lastResult = 'wrong';
+            record.needReview = true;
+            record.lastReviewAt = now;
+        }
+
+        store.put(record);
+        console.log(`【历史记录】更新 Q-${qid}，对:${record.correctCount || 0} 错:${record.errorCount || 0} 待复习:${record.needReview !== false}`);
     } catch (e) {
         console.error("保存历史记录失败:", e);
     }
@@ -418,7 +501,7 @@ async function getProblemHistory(qid) {
     }
 }
 
-async function getErrorBook() {
+async function getErrorBook(filter = 'needReview') {
     try {
         const db = await initDB();
         return new Promise((resolve, reject) => {
@@ -426,8 +509,12 @@ async function getErrorBook() {
             const store = tx.objectStore(STORE_NAME);
             const request = store.getAll();
             request.onsuccess = () => {
-                // 过滤出真正有错题记录的，并按时间倒序排列
-                const results = (request.result || []).filter(r => r.errorCount > 0);
+                let results = (request.result || []).filter(r => r.errorCount > 0);
+                if (filter === 'needReview') {
+                    results = results.filter(r => r.needReview !== false);
+                } else if (filter === 'resolved') {
+                    results = results.filter(r => r.needReview === false);
+                }
                 results.sort((a, b) => b.timestamp - a.timestamp);
                 resolve(results);
             };
@@ -454,37 +541,109 @@ async function clearErrorBook() {
     }
 }
 
-async function renderErrorBook() {
+function startErrorReview(qid, url) {
+    helperMode = 'practice';
+    localStorage.setItem(MODE_KEY, 'practice');
+    const modeSelect = document.getElementById('helper-mode');
+    if (modeSelect) modeSelect.value = 'practice';
+    console.log(`【错题重刷】开始重刷 Q-${qid}`);
+    window.location.href = url;
+}
+
+async function renderErrorBook(filter = 'needReview') {
     const listEl = document.getElementById('error-list');
+    const summaryEl = document.getElementById('error-book-summary');
     if (!listEl) return;
-    
-    listEl.innerHTML = '<li style="color: #666;">加载中...</li>';
-    
-    const errors = await getErrorBook();
-    
-    if (errors.length === 0) {
-        listEl.innerHTML = '<li style="color: #666; padding: 5px 0;">暂无错题记录，继续加油！</li>';
-        return;
-    }
-    
-    listEl.innerHTML = '';
-    errors.forEach(err => {
-        const date = new Date(err.timestamp).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-        const li = document.createElement('li');
-        li.style.cssText = 'padding: 5px 0; border-bottom: 1px dashed #eee; display: flex; justify-content: space-between; align-items: center;';
-        
-        li.innerHTML = `
-            <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                <a href="${err.url}" target="_blank" style="color: #2563eb; text-decoration: none; font-weight: bold;">Q-${err.qid}</a>
-                <span style="color: #666; margin-left: 5px;">${err.levelname} ${err.qtypename}</span>
+
+    listEl.innerHTML = '<li class="error-book-empty">加载中...</li>';
+
+    const allErrors = await getErrorBook('all');
+    const errors = await getErrorBook(filter);
+    const grouped = groupErrorsByDifficulty(errors);
+
+    if (summaryEl) {
+        const reviewing = allErrors.filter(item => item.needReview !== false).length;
+        const resolved = allErrors.filter(item => item.needReview === false).length;
+        summaryEl.innerHTML = `
+            <div class="error-book-summary-card">
+                <div class="error-book-summary-number">${reviewing}</div>
+                <div class="error-book-summary-label">待复习</div>
             </div>
-            <div style="text-align: right; color: #999; min-width: 80px;">
-                <span style="color: #059669; font-size: 11px; margin-right: 3px;">对${err.correctCount || 0}</span>
-                <span style="color: #dc2626; font-weight: bold; margin-right: 5px;">错${err.errorCount}次</span>
-                ${date}
+            <div class="error-book-summary-card">
+                <div class="error-book-summary-number">${allErrors.length}</div>
+                <div class="error-book-summary-label">错题总数</div>
+            </div>
+            <div class="error-book-summary-card">
+                <div class="error-book-summary-number">${resolved}</div>
+                <div class="error-book-summary-label">已刷回</div>
             </div>
         `;
+    }
+
+    if (errors.length === 0) {
+        listEl.innerHTML = '<li class="error-book-empty">当前筛选下没有题目，继续保持。</li>';
+        return;
+    }
+
+    listEl.innerHTML = '';
+
+    grouped.forEach(group => {
+        const li = document.createElement('li');
+        li.className = 'error-group';
+
+        const cardsHtml = group.items.map(err => {
+            const date = new Date(err.timestamp).toLocaleString('zh-CN', {
+                month: 'numeric',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+            });
+            const statusText = err.needReview === false ? '已刷回' : '待复习';
+            const statusClass = err.needReview === false ? 'resolved' : 'reviewing';
+            return `
+                <div class="error-card">
+                    <div class="error-card-main">
+                        <div class="error-card-title-row">
+                            <a class="error-card-title" href="${err.url}" target="_blank">Q-${err.qid}</a>
+                            <span class="error-card-badge ${statusClass}">${statusText}</span>
+                        </div>
+                        <div class="error-card-meta">
+                            <span>${err.levelname || '未知难度'}</span>
+                            <span>${err.qtypename || '未知题型'}</span>
+                        </div>
+                        <div class="error-card-stats">
+                            <span class="ok">对 ${err.correctCount || 0}</span>
+                            <span class="bad">错 ${err.errorCount || 0}</span>
+                            <span class="time">${date}</span>
+                        </div>
+                    </div>
+                    <div class="error-card-actions">
+                        <button class="helper-btn error-review-btn" data-qid="${err.qid}" data-url="${err.url}">去重刷</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        li.innerHTML = `
+            <details class="error-group-details" open>
+                <summary class="error-group-header">
+                    <span class="error-group-title">${group.level}</span>
+                    <span class="error-group-count">${group.items.length} 题</span>
+                </summary>
+                <div class="error-group-list">
+                    ${cardsHtml}
+                </div>
+            </details>
+        `;
         listEl.appendChild(li);
+    });
+
+    listEl.querySelectorAll('.error-review-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const qid = btn.getAttribute('data-qid');
+            const url = btn.getAttribute('data-url');
+            startErrorReview(qid, url);
+        });
     });
 }
 
@@ -914,7 +1073,7 @@ async function lockPracticeResult(qid, result, reason) {
     }
 
     if (!state.recordedHistory && state.data) {
-        await saveProblemHistory(state.data, result === 1);
+        await saveProblemHistory(state.data, result === 1, { mode: helperMode });
         state.recordedHistory = true;
         currentProblemHistory = await getProblemHistory(qid);
     }
