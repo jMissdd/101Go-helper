@@ -26,6 +26,8 @@ const practiceSession = {
 let currentDisplayResult = 0;
 let currentCountdownSec = null;
 let practiceTimerHandle = null;
+let currentErrorFilter = 'needReview';
+let errorBookRenderToken = 0;
 
 function ensurePracticeState(qid, problemData) {
     if (!qid) return null;
@@ -95,13 +97,27 @@ function createPanel() {
             <div id="practice-stats" class="helper-info-block" style="display:none; margin-top:8px;"></div>
             
             <button id="btn-show-errors" class="helper-btn" style="background-color: #f59e0b; color: white; border: none;">📚 查看错题本</button>
-            
-            <div id="error-book-area" style="display:none; margin-top:10px; max-height: 200px; overflow-y: auto; border-top: 1px solid #eee; padding-top: 10px;">
-                <div style="font-weight: bold; margin-bottom: 5px;">我的错题本</div>
-                <ul id="error-list" style="list-style: none; padding: 0; margin: 0; font-size: 12px;">
-                    <li style="color: #666;">加载中...</li>
+
+            <div id="error-book-area" class="error-book-area" style="display:none;">
+                <div class="error-book-header">
+                    <div>
+                        <div class="error-book-title">错题本</div>
+                        <div class="error-book-subtitle">仅做题模式下，错题重刷做对后会自动移出待复习列表</div>
+                    </div>
+                    <button id="btn-clear-errors" class="helper-btn error-clear-btn">清空</button>
+                </div>
+
+                <div id="error-book-summary" class="error-book-summary"></div>
+
+                <div class="error-book-toolbar">
+                    <button id="btn-error-filter-review" class="helper-btn error-filter-btn active">待复习</button>
+                    <button id="btn-error-filter-all" class="helper-btn error-filter-btn">全部</button>
+                    <button id="btn-error-filter-resolved" class="helper-btn error-filter-btn">已刷回</button>
+                </div>
+
+                <ul id="error-list" class="error-book-list">
+                    <li class="error-book-empty">加载中...</li>
                 </ul>
-                <button id="btn-clear-errors" style="margin-top: 10px; font-size: 11px; padding: 2px 5px; cursor: pointer;">清空错题本</button>
             </div>
 
             <div id="book-practice-area" style="display:none; margin-top:10px; border:1px solid #8b5cf6; border-radius:6px; padding:8px; background:#faf5ff;">
@@ -186,18 +202,39 @@ function createPanel() {
         const area = document.getElementById('error-book-area');
         if (area.style.display === 'none') {
             area.style.display = 'block';
-            renderErrorBook();
+            panel.querySelector('#btn-show-errors').textContent = '📚 收起错题本';
+            renderErrorBook(currentErrorFilter);
         } else {
             area.style.display = 'none';
+            panel.querySelector('#btn-show-errors').textContent = '📚 查看错题本';
         }
     });
     
     // 绑定清空错题本按钮
     panel.querySelector('#btn-clear-errors').addEventListener('click', () => {
         if (confirm('确定要清空所有错题记录吗？')) {
-            clearErrorBook().then(() => renderErrorBook());
+            clearErrorBook().then(() => renderErrorBook(currentErrorFilter));
         }
     });
+
+    const errorFilterReviewBtn = panel.querySelector('#btn-error-filter-review');
+    const errorFilterAllBtn = panel.querySelector('#btn-error-filter-all');
+    const errorFilterResolvedBtn = panel.querySelector('#btn-error-filter-resolved');
+
+    function setErrorFilter(filter) {
+        currentErrorFilter = filter;
+        [errorFilterReviewBtn, errorFilterAllBtn, errorFilterResolvedBtn].forEach(btn => {
+            btn.classList.remove('active');
+        });
+        if (filter === 'needReview') errorFilterReviewBtn.classList.add('active');
+        if (filter === 'all') errorFilterAllBtn.classList.add('active');
+        if (filter === 'resolved') errorFilterResolvedBtn.classList.add('active');
+        renderErrorBook(filter);
+    }
+
+    errorFilterReviewBtn.addEventListener('click', () => setErrorFilter('needReview'));
+    errorFilterAllBtn.addEventListener('click', () => setErrorFilter('all'));
+    errorFilterResolvedBtn.addEventListener('click', () => setErrorFilter('resolved'));
 
     // 棋书搜索绑定
     let _bookListCache = null;
@@ -339,6 +376,166 @@ function getCurrentPracticeStatsText() {
 // ==========================================
 const DB_NAME = '101WeiqiHelperDB';
 const STORE_NAME = 'error_book';
+const TRUSTED_101_HOSTS = new Set([
+    'www.101weiqi.com',
+    '101weiqi.com',
+    'www.101weiqi.cn',
+    '101weiqi.cn',
+]);
+
+function getDifficultyRank(levelname) {
+    if (!levelname) return 9999;
+    const text = String(levelname).toUpperCase().trim();
+
+    const kMatch = text.match(/^(\d+)\s*K\+?$/);
+    if (kMatch) return 1000 + parseInt(kMatch[1], 10);
+
+    const dMatch = text.match(/^(\d+)\s*D\+?$/);
+    if (dMatch) return 500 - parseInt(dMatch[1], 10);
+
+    return 9999;
+}
+
+function groupErrorsByDifficulty(errors) {
+    const groups = {};
+    errors.forEach((item) => {
+        const key = item.levelname || '未标注难度';
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(item);
+    });
+
+    return Object.entries(groups)
+        .sort((a, b) => getDifficultyRank(a[0]) - getDifficultyRank(b[0]))
+        .map(([level, items]) => ({
+            level,
+            items: items.sort((x, y) => (y.timestamp || 0) - (x.timestamp || 0)),
+        }));
+}
+
+function filterErrorBookRecords(records, filter = 'needReview') {
+    const allRecords = Array.isArray(records) ? records : [];
+    if (filter === 'all') return allRecords;
+    if (filter === 'resolved') return allRecords.filter(item => item.needReview === false);
+    if (filter === 'needReview') return allRecords.filter(item => item.needReview !== false);
+    return allRecords;
+}
+
+function getTrusted101Url(url) {
+    try {
+        const parsed = new URL(url, window.location.href);
+        if (parsed.protocol !== 'https:') return null;
+        if (!TRUSTED_101_HOSTS.has(parsed.hostname)) return null;
+        return parsed.toString();
+    } catch (e) {
+        return null;
+    }
+}
+
+function createElement(tagName, className, text) {
+    const element = document.createElement(tagName);
+    if (className) element.className = className;
+    if (typeof text !== 'undefined') element.textContent = String(text);
+    return element;
+}
+
+function createErrorBookEmptyItem(text) {
+    const li = createElement('li', 'error-book-empty', text);
+    return li;
+}
+
+function renderErrorBookSummary(summaryEl, allErrors) {
+    if (!summaryEl) return;
+
+    const reviewing = allErrors.filter(item => item.needReview !== false).length;
+    const resolved = allErrors.filter(item => item.needReview === false).length;
+    const cards = [
+        { label: '待复习', value: reviewing },
+        { label: '错题总数', value: allErrors.length },
+        { label: '已刷回', value: resolved },
+    ];
+
+    summaryEl.replaceChildren(...cards.map(card => {
+        const wrapper = createElement('div', 'error-book-summary-card');
+        wrapper.append(
+            createElement('div', 'error-book-summary-number', card.value),
+            createElement('div', 'error-book-summary-label', card.label)
+        );
+        return wrapper;
+    }));
+}
+
+function createErrorBookCard(err) {
+    const safeUrl = getTrusted101Url(err.url);
+    const dateText = new Date(err.timestamp).toLocaleString('zh-CN', {
+        month: 'numeric',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+    const statusText = err.needReview === false ? '已刷回' : '待复习';
+    const statusClass = err.needReview === false ? 'resolved' : 'reviewing';
+
+    const card = createElement('div', 'error-card');
+    const main = createElement('div', 'error-card-main');
+    const titleRow = createElement('div', 'error-card-title-row');
+    const titleLink = createElement('a', 'error-card-title', `Q-${err.qid}`);
+    const badge = createElement('span', `error-card-badge ${statusClass}`, statusText);
+    const meta = createElement('div', 'error-card-meta');
+    const stats = createElement('div', 'error-card-stats');
+    const actions = createElement('div', 'error-card-actions');
+    const reviewBtn = createElement('button', 'helper-btn error-review-btn', '去重刷');
+
+    if (safeUrl) {
+        titleLink.href = safeUrl;
+        titleLink.target = '_blank';
+        titleLink.rel = 'noopener noreferrer';
+        reviewBtn.addEventListener('click', () => startErrorReview(err.qid, safeUrl));
+    } else {
+        titleLink.href = '#';
+        titleLink.addEventListener('click', (event) => event.preventDefault());
+        titleLink.title = '链接无效';
+        reviewBtn.disabled = true;
+        reviewBtn.title = '错题链接无效，无法跳转';
+    }
+
+    meta.append(
+        createElement('span', '', err.levelname || '未知难度'),
+        createElement('span', '', err.qtypename || '未知题型')
+    );
+
+    stats.append(
+        createElement('span', 'ok', `对 ${err.correctCount || 0}`),
+        createElement('span', 'bad', `错 ${err.errorCount || 0}`),
+        createElement('span', 'time', dateText)
+    );
+
+    titleRow.append(titleLink, badge);
+    main.append(titleRow, meta, stats);
+    actions.appendChild(reviewBtn);
+    card.append(main, actions);
+    return card;
+}
+
+function createErrorBookGroup(group) {
+    const li = createElement('li', 'error-group');
+    const details = createElement('details', 'error-group-details');
+    details.open = true;
+
+    const summary = createElement('summary', 'error-group-header');
+    summary.append(
+        createElement('span', 'error-group-title', group.level),
+        createElement('span', 'error-group-count', `${group.items.length} 题`)
+    );
+
+    const list = createElement('div', 'error-group-list');
+    group.items.forEach(err => {
+        list.appendChild(createErrorBookCard(err));
+    });
+
+    details.append(summary, list);
+    li.appendChild(details);
+    return li;
+}
 
 function initDB() {
     return new Promise((resolve, reject) => {
@@ -356,47 +553,66 @@ function initDB() {
     });
 }
 
-async function saveProblemHistory(problemData, isCorrect = false) {
+async function saveProblemHistory(problemData, isCorrect = false, options = {}) {
     if (!problemData || !problemData.publicid) return;
-    
+
+    const mode = options.mode || helperMode || 'browse';
+    const qid = problemData.publicid;
+
     try {
-        const db = await initDB();
-        const tx = db.transaction(STORE_NAME, 'readwrite');
-        const store = tx.objectStore(STORE_NAME);
-        
-        const qid = problemData.publicid;
-        
-        // 先查询是否已存在
-        const getReq = store.get(qid);
-        getReq.onsuccess = () => {
-            let record = getReq.result;
-            if (record) {
-                // 更新次数和时间
-                if (isCorrect) {
-                    record.correctCount = (record.correctCount || 0) + 1;
-                } else {
-                    record.errorCount = (record.errorCount || 0) + 1;
-                }
-                record.timestamp = Date.now();
-                store.put(record);
-                console.log(`【历史记录】更新 Q-${qid}，对:${record.correctCount || 0} 错:${record.errorCount || 0}`);
-            } else {
-                // 新增记录
-                record = {
-                    qid: qid,
-                    title: problemData.title || '',
-                    desc: problemData.desc || '',
-                    levelname: problemData.levelname || '',
-                    qtypename: problemData.qtypename || '',
-                    errorCount: isCorrect ? 0 : 1,
-                    correctCount: isCorrect ? 1 : 0,
-                    timestamp: Date.now(),
-                    url: window.location.href
-                };
-                store.add(record);
-                console.log(`【历史记录】新增 Q-${qid}，对:${record.correctCount} 错:${record.errorCount}`);
-            }
+        const existing = await getProblemHistory(qid);
+
+        const now = Date.now();
+        const record = existing || {
+            qid: qid,
+            title: problemData.title || '',
+            desc: problemData.desc || '',
+            levelname: problemData.levelname || '',
+            qtypename: problemData.qtypename || '',
+            errorCount: 0,
+            correctCount: 0,
+            timestamp: now,
+            url: window.location.href,
+            needReview: false,
+            lastResult: null,
+            lastMode: mode,
+            lastReviewAt: null,
         };
+
+        record.title = problemData.title || record.title || '';
+        record.desc = problemData.desc || record.desc || '';
+        record.levelname = problemData.levelname || record.levelname || '';
+        record.qtypename = problemData.qtypename || record.qtypename || '';
+        record.url = window.location.href;
+        record.timestamp = now;
+        record.lastMode = mode;
+
+        if (isCorrect) {
+            record.correctCount = (record.correctCount || 0) + 1;
+            record.lastResult = 'correct';
+
+            if (mode === 'practice' && (record.errorCount || 0) > 0) {
+                record.needReview = false;
+                record.lastReviewAt = now;
+            }
+        } else {
+            record.errorCount = (record.errorCount || 0) + 1;
+            record.lastResult = 'wrong';
+            record.needReview = true;
+            record.lastReviewAt = now;
+        }
+
+        const db = await initDB();
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, 'readwrite');
+            const store = tx.objectStore(STORE_NAME);
+            const request = store.put(record);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
+        });
+        console.log(`【历史记录】更新 Q-${qid}，对:${record.correctCount || 0} 错:${record.errorCount || 0} 待复习:${record.needReview !== false}`);
     } catch (e) {
         console.error("保存历史记录失败:", e);
     }
@@ -426,7 +642,6 @@ async function getErrorBook() {
             const store = tx.objectStore(STORE_NAME);
             const request = store.getAll();
             request.onsuccess = () => {
-                // 过滤出真正有错题记录的，并按时间倒序排列
                 const results = (request.result || []).filter(r => r.errorCount > 0);
                 results.sort((a, b) => b.timestamp - a.timestamp);
                 resolve(results);
@@ -454,38 +669,45 @@ async function clearErrorBook() {
     }
 }
 
-async function renderErrorBook() {
-    const listEl = document.getElementById('error-list');
-    if (!listEl) return;
-    
-    listEl.innerHTML = '<li style="color: #666;">加载中...</li>';
-    
-    const errors = await getErrorBook();
-    
-    if (errors.length === 0) {
-        listEl.innerHTML = '<li style="color: #666; padding: 5px 0;">暂无错题记录，继续加油！</li>';
+function startErrorReview(qid, url) {
+    const safeUrl = getTrusted101Url(url);
+    if (!safeUrl) {
+        console.warn('[101围棋助手] 拒绝跳转到不受信任的地址:', url);
         return;
     }
-    
-    listEl.innerHTML = '';
-    errors.forEach(err => {
-        const date = new Date(err.timestamp).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-        const li = document.createElement('li');
-        li.style.cssText = 'padding: 5px 0; border-bottom: 1px dashed #eee; display: flex; justify-content: space-between; align-items: center;';
-        
-        li.innerHTML = `
-            <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                <a href="${err.url}" target="_blank" style="color: #2563eb; text-decoration: none; font-weight: bold;">Q-${err.qid}</a>
-                <span style="color: #666; margin-left: 5px;">${err.levelname} ${err.qtypename}</span>
-            </div>
-            <div style="text-align: right; color: #999; min-width: 80px;">
-                <span style="color: #059669; font-size: 11px; margin-right: 3px;">对${err.correctCount || 0}</span>
-                <span style="color: #dc2626; font-weight: bold; margin-right: 5px;">错${err.errorCount}次</span>
-                ${date}
-            </div>
-        `;
-        listEl.appendChild(li);
-    });
+
+    helperMode = 'practice';
+    localStorage.setItem(MODE_KEY, 'practice');
+    const modeSelect = document.getElementById('helper-mode');
+    if (modeSelect) modeSelect.value = 'practice';
+    console.log(`【错题重刷】开始重刷 Q-${qid}`);
+    window.location.href = safeUrl;
+}
+
+async function renderErrorBook(filter = 'needReview') {
+    const listEl = document.getElementById('error-list');
+    const summaryEl = document.getElementById('error-book-summary');
+    if (!listEl) return;
+
+    const renderToken = ++errorBookRenderToken;
+    listEl.replaceChildren(createErrorBookEmptyItem('加载中...'));
+
+    const allErrors = await getErrorBook();
+    if (renderToken !== errorBookRenderToken) return;
+
+    const errors = filterErrorBookRecords(allErrors, filter);
+    const grouped = groupErrorsByDifficulty(errors);
+
+    renderErrorBookSummary(summaryEl, allErrors);
+
+    if (errors.length === 0) {
+        if (renderToken !== errorBookRenderToken) return;
+        listEl.replaceChildren(createErrorBookEmptyItem('当前筛选下没有题目，继续保持。'));
+        return;
+    }
+
+    if (renderToken !== errorBookRenderToken) return;
+    listEl.replaceChildren(...grouped.map(group => createErrorBookGroup(group)));
 }
 
 
@@ -914,7 +1136,7 @@ async function lockPracticeResult(qid, result, reason) {
     }
 
     if (!state.recordedHistory && state.data) {
-        await saveProblemHistory(state.data, result === 1);
+        await saveProblemHistory(state.data, result === 1, { mode: helperMode });
         state.recordedHistory = true;
         currentProblemHistory = await getProblemHistory(qid);
     }
