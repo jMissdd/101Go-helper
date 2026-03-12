@@ -27,6 +27,7 @@ let currentDisplayResult = 0;
 let currentCountdownSec = null;
 let practiceTimerHandle = null;
 let currentErrorFilter = 'needReview';
+let errorBookRenderToken = 0;
 
 function ensurePracticeState(qid, problemData) {
     if (!qid) return null;
@@ -375,6 +376,12 @@ function getCurrentPracticeStatsText() {
 // ==========================================
 const DB_NAME = '101WeiqiHelperDB';
 const STORE_NAME = 'error_book';
+const TRUSTED_101_HOSTS = new Set([
+    'www.101weiqi.com',
+    '101weiqi.com',
+    'www.101weiqi.cn',
+    '101weiqi.cn',
+]);
 
 function getDifficultyRank(levelname) {
     if (!levelname) return 9999;
@@ -405,6 +412,131 @@ function groupErrorsByDifficulty(errors) {
         }));
 }
 
+function filterErrorBookRecords(records, filter = 'needReview') {
+    const allRecords = Array.isArray(records) ? records : [];
+    if (filter === 'all') return allRecords;
+    if (filter === 'resolved') return allRecords.filter(item => item.needReview === false);
+    if (filter === 'needReview') return allRecords.filter(item => item.needReview !== false);
+    return allRecords;
+}
+
+function getTrusted101Url(url) {
+    try {
+        const parsed = new URL(url, window.location.href);
+        if (parsed.protocol !== 'https:') return null;
+        if (!TRUSTED_101_HOSTS.has(parsed.hostname)) return null;
+        return parsed.toString();
+    } catch (e) {
+        return null;
+    }
+}
+
+function createElement(tagName, className, text) {
+    const element = document.createElement(tagName);
+    if (className) element.className = className;
+    if (typeof text !== 'undefined') element.textContent = String(text);
+    return element;
+}
+
+function createErrorBookEmptyItem(text) {
+    const li = createElement('li', 'error-book-empty', text);
+    return li;
+}
+
+function renderErrorBookSummary(summaryEl, allErrors) {
+    if (!summaryEl) return;
+
+    const reviewing = allErrors.filter(item => item.needReview !== false).length;
+    const resolved = allErrors.filter(item => item.needReview === false).length;
+    const cards = [
+        { label: '待复习', value: reviewing },
+        { label: '错题总数', value: allErrors.length },
+        { label: '已刷回', value: resolved },
+    ];
+
+    summaryEl.replaceChildren(...cards.map(card => {
+        const wrapper = createElement('div', 'error-book-summary-card');
+        wrapper.append(
+            createElement('div', 'error-book-summary-number', card.value),
+            createElement('div', 'error-book-summary-label', card.label)
+        );
+        return wrapper;
+    }));
+}
+
+function createErrorBookCard(err) {
+    const safeUrl = getTrusted101Url(err.url);
+    const dateText = new Date(err.timestamp).toLocaleString('zh-CN', {
+        month: 'numeric',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+    const statusText = err.needReview === false ? '已刷回' : '待复习';
+    const statusClass = err.needReview === false ? 'resolved' : 'reviewing';
+
+    const card = createElement('div', 'error-card');
+    const main = createElement('div', 'error-card-main');
+    const titleRow = createElement('div', 'error-card-title-row');
+    const titleLink = createElement('a', 'error-card-title', `Q-${err.qid}`);
+    const badge = createElement('span', `error-card-badge ${statusClass}`, statusText);
+    const meta = createElement('div', 'error-card-meta');
+    const stats = createElement('div', 'error-card-stats');
+    const actions = createElement('div', 'error-card-actions');
+    const reviewBtn = createElement('button', 'helper-btn error-review-btn', '去重刷');
+
+    if (safeUrl) {
+        titleLink.href = safeUrl;
+        titleLink.target = '_blank';
+        titleLink.rel = 'noopener noreferrer';
+        reviewBtn.addEventListener('click', () => startErrorReview(err.qid, safeUrl));
+    } else {
+        titleLink.href = '#';
+        titleLink.addEventListener('click', (event) => event.preventDefault());
+        titleLink.title = '链接无效';
+        reviewBtn.disabled = true;
+        reviewBtn.title = '错题链接无效，无法跳转';
+    }
+
+    meta.append(
+        createElement('span', '', err.levelname || '未知难度'),
+        createElement('span', '', err.qtypename || '未知题型')
+    );
+
+    stats.append(
+        createElement('span', 'ok', `对 ${err.correctCount || 0}`),
+        createElement('span', 'bad', `错 ${err.errorCount || 0}`),
+        createElement('span', 'time', dateText)
+    );
+
+    titleRow.append(titleLink, badge);
+    main.append(titleRow, meta, stats);
+    actions.appendChild(reviewBtn);
+    card.append(main, actions);
+    return card;
+}
+
+function createErrorBookGroup(group) {
+    const li = createElement('li', 'error-group');
+    const details = createElement('details', 'error-group-details');
+    details.open = true;
+
+    const summary = createElement('summary', 'error-group-header');
+    summary.append(
+        createElement('span', 'error-group-title', group.level),
+        createElement('span', 'error-group-count', `${group.items.length} 题`)
+    );
+
+    const list = createElement('div', 'error-group-list');
+    group.items.forEach(err => {
+        list.appendChild(createErrorBookCard(err));
+    });
+
+    details.append(summary, list);
+    li.appendChild(details);
+    return li;
+}
+
 function initDB() {
     return new Promise((resolve, reject) => {
         const request = indexedDB.open(DB_NAME, 1);
@@ -428,15 +560,7 @@ async function saveProblemHistory(problemData, isCorrect = false, options = {}) 
     const qid = problemData.publicid;
 
     try {
-        const db = await initDB();
-        const tx = db.transaction(STORE_NAME, 'readwrite');
-        const store = tx.objectStore(STORE_NAME);
-
-        const existing = await new Promise((resolve) => {
-            const req = store.get(qid);
-            req.onsuccess = () => resolve(req.result || null);
-            req.onerror = () => resolve(null);
-        });
+        const existing = await getProblemHistory(qid);
 
         const now = Date.now();
         const record = existing || {
@@ -478,7 +602,16 @@ async function saveProblemHistory(problemData, isCorrect = false, options = {}) 
             record.lastReviewAt = now;
         }
 
-        store.put(record);
+        const db = await initDB();
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, 'readwrite');
+            const store = tx.objectStore(STORE_NAME);
+            const request = store.put(record);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
+        });
         console.log(`【历史记录】更新 Q-${qid}，对:${record.correctCount || 0} 错:${record.errorCount || 0} 待复习:${record.needReview !== false}`);
     } catch (e) {
         console.error("保存历史记录失败:", e);
@@ -501,7 +634,7 @@ async function getProblemHistory(qid) {
     }
 }
 
-async function getErrorBook(filter = 'needReview') {
+async function getErrorBook() {
     try {
         const db = await initDB();
         return new Promise((resolve, reject) => {
@@ -509,12 +642,7 @@ async function getErrorBook(filter = 'needReview') {
             const store = tx.objectStore(STORE_NAME);
             const request = store.getAll();
             request.onsuccess = () => {
-                let results = (request.result || []).filter(r => r.errorCount > 0);
-                if (filter === 'needReview') {
-                    results = results.filter(r => r.needReview !== false);
-                } else if (filter === 'resolved') {
-                    results = results.filter(r => r.needReview === false);
-                }
+                const results = (request.result || []).filter(r => r.errorCount > 0);
                 results.sort((a, b) => b.timestamp - a.timestamp);
                 resolve(results);
             };
@@ -542,12 +670,18 @@ async function clearErrorBook() {
 }
 
 function startErrorReview(qid, url) {
+    const safeUrl = getTrusted101Url(url);
+    if (!safeUrl) {
+        console.warn('[101围棋助手] 拒绝跳转到不受信任的地址:', url);
+        return;
+    }
+
     helperMode = 'practice';
     localStorage.setItem(MODE_KEY, 'practice');
     const modeSelect = document.getElementById('helper-mode');
     if (modeSelect) modeSelect.value = 'practice';
     console.log(`【错题重刷】开始重刷 Q-${qid}`);
-    window.location.href = url;
+    window.location.href = safeUrl;
 }
 
 async function renderErrorBook(filter = 'needReview') {
@@ -555,96 +689,25 @@ async function renderErrorBook(filter = 'needReview') {
     const summaryEl = document.getElementById('error-book-summary');
     if (!listEl) return;
 
-    listEl.innerHTML = '<li class="error-book-empty">加载中...</li>';
+    const renderToken = ++errorBookRenderToken;
+    listEl.replaceChildren(createErrorBookEmptyItem('加载中...'));
 
-    const allErrors = await getErrorBook('all');
-    const errors = await getErrorBook(filter);
+    const allErrors = await getErrorBook();
+    if (renderToken !== errorBookRenderToken) return;
+
+    const errors = filterErrorBookRecords(allErrors, filter);
     const grouped = groupErrorsByDifficulty(errors);
 
-    if (summaryEl) {
-        const reviewing = allErrors.filter(item => item.needReview !== false).length;
-        const resolved = allErrors.filter(item => item.needReview === false).length;
-        summaryEl.innerHTML = `
-            <div class="error-book-summary-card">
-                <div class="error-book-summary-number">${reviewing}</div>
-                <div class="error-book-summary-label">待复习</div>
-            </div>
-            <div class="error-book-summary-card">
-                <div class="error-book-summary-number">${allErrors.length}</div>
-                <div class="error-book-summary-label">错题总数</div>
-            </div>
-            <div class="error-book-summary-card">
-                <div class="error-book-summary-number">${resolved}</div>
-                <div class="error-book-summary-label">已刷回</div>
-            </div>
-        `;
-    }
+    renderErrorBookSummary(summaryEl, allErrors);
 
     if (errors.length === 0) {
-        listEl.innerHTML = '<li class="error-book-empty">当前筛选下没有题目，继续保持。</li>';
+        if (renderToken !== errorBookRenderToken) return;
+        listEl.replaceChildren(createErrorBookEmptyItem('当前筛选下没有题目，继续保持。'));
         return;
     }
 
-    listEl.innerHTML = '';
-
-    grouped.forEach(group => {
-        const li = document.createElement('li');
-        li.className = 'error-group';
-
-        const cardsHtml = group.items.map(err => {
-            const date = new Date(err.timestamp).toLocaleString('zh-CN', {
-                month: 'numeric',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-            });
-            const statusText = err.needReview === false ? '已刷回' : '待复习';
-            const statusClass = err.needReview === false ? 'resolved' : 'reviewing';
-            return `
-                <div class="error-card">
-                    <div class="error-card-main">
-                        <div class="error-card-title-row">
-                            <a class="error-card-title" href="${err.url}" target="_blank">Q-${err.qid}</a>
-                            <span class="error-card-badge ${statusClass}">${statusText}</span>
-                        </div>
-                        <div class="error-card-meta">
-                            <span>${err.levelname || '未知难度'}</span>
-                            <span>${err.qtypename || '未知题型'}</span>
-                        </div>
-                        <div class="error-card-stats">
-                            <span class="ok">对 ${err.correctCount || 0}</span>
-                            <span class="bad">错 ${err.errorCount || 0}</span>
-                            <span class="time">${date}</span>
-                        </div>
-                    </div>
-                    <div class="error-card-actions">
-                        <button class="helper-btn error-review-btn" data-qid="${err.qid}" data-url="${err.url}">去重刷</button>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-        li.innerHTML = `
-            <details class="error-group-details" open>
-                <summary class="error-group-header">
-                    <span class="error-group-title">${group.level}</span>
-                    <span class="error-group-count">${group.items.length} 题</span>
-                </summary>
-                <div class="error-group-list">
-                    ${cardsHtml}
-                </div>
-            </details>
-        `;
-        listEl.appendChild(li);
-    });
-
-    listEl.querySelectorAll('.error-review-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const qid = btn.getAttribute('data-qid');
-            const url = btn.getAttribute('data-url');
-            startErrorReview(qid, url);
-        });
-    });
+    if (renderToken !== errorBookRenderToken) return;
+    listEl.replaceChildren(...grouped.map(group => createErrorBookGroup(group)));
 }
 
 
