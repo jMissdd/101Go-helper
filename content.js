@@ -8,6 +8,13 @@ s.onload = function() { this.remove(); };
 
 const MODE_KEY = 'weiqi_helper_mode';
 const LIMIT_KEY = 'weiqi_helper_time_limit_sec';
+const PANEL_UI_STATE_KEY = 'weiqi_helper_panel_ui_state_v1';
+const PANEL_SECTION_STATE_KEY = 'weiqi_helper_panel_sections_v1';
+const PANEL_PRESETS = {
+    small: { width: 300, height: 340 },
+    medium: { width: 360, height: 560 },
+    large: { width: 440, height: 720 },
+};
 
 let helperMode = localStorage.getItem(MODE_KEY) || 'browse'; // browse | practice | book
 let practiceTimeLimitSec = parseInt(localStorage.getItem(LIMIT_KEY) || '60', 10);
@@ -60,6 +67,134 @@ function formatCountdown(sec) {
     return `${mm}:${ss}`;
 }
 
+function clamp(value, min, max) {
+    return Math.max(min, Math.min(value, max));
+}
+
+function getDefaultPanelState() {
+    const preset = PANEL_PRESETS.medium;
+    return {
+        width: preset.width,
+        height: preset.height,
+        top: 60,
+        left: Math.max(12, window.innerWidth - preset.width - 20),
+        minimized: false,
+        preset: 'medium',
+    };
+}
+
+function loadPanelState() {
+    const fallback = getDefaultPanelState();
+    try {
+        const raw = localStorage.getItem(PANEL_UI_STATE_KEY);
+        if (!raw) return fallback;
+        return { ...fallback, ...JSON.parse(raw) };
+    } catch (e) {
+        return fallback;
+    }
+}
+
+function savePanelState(state) {
+    try {
+        localStorage.setItem(PANEL_UI_STATE_KEY, JSON.stringify(state));
+    } catch (e) {}
+}
+
+function normalizePanelState(state) {
+    const fallback = getDefaultPanelState();
+    const width = clamp(Number(state.width) || fallback.width, 280, Math.max(280, window.innerWidth - 24));
+    const height = clamp(Number(state.height) || fallback.height, 240, Math.max(240, window.innerHeight - 24));
+    const minimized = !!state.minimized;
+    const visibleHeight = minimized ? 58 : height;
+    const left = clamp(Number(state.left) || fallback.left, 8, Math.max(8, window.innerWidth - width - 8));
+    const top = clamp(Number(state.top) || fallback.top, 8, Math.max(8, window.innerHeight - visibleHeight - 8));
+    const preset = PANEL_PRESETS[state.preset] ? state.preset : '';
+    return { width, height, left, top, minimized, preset };
+}
+
+function applyPanelState(panel, nextState) {
+    const state = normalizePanelState(nextState);
+    panel.style.width = `${state.width}px`;
+    panel.style.height = state.minimized ? 'auto' : `${state.height}px`;
+    panel.style.left = `${state.left}px`;
+    panel.style.top = `${state.top}px`;
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+    panel.classList.toggle('is-minimized', state.minimized);
+    panel.dataset.preset = state.preset || '';
+
+    panel.querySelectorAll('.toolbar-preset-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.preset === state.preset);
+    });
+
+    const minimizeBtn = panel.querySelector('#btn-minimize-panel');
+    if (minimizeBtn) {
+        minimizeBtn.textContent = state.minimized ? '▣' : '－';
+        minimizeBtn.title = state.minimized ? '展开面板' : '最小化面板';
+    }
+
+    savePanelState(state);
+    return state;
+}
+
+function getPanelStateFromDom(panel) {
+    const rect = panel.getBoundingClientRect();
+    const saved = loadPanelState();
+    return normalizePanelState({
+        width: Math.round(rect.width),
+        height: panel.classList.contains('is-minimized') ? saved.height : Math.round(rect.height),
+        left: Math.round(rect.left),
+        top: Math.round(rect.top),
+        minimized: panel.classList.contains('is-minimized'),
+        preset: panel.dataset.preset || '',
+    });
+}
+
+function loadSectionState() {
+    const fallback = { settings: true, error: false, search: false };
+    try {
+        const raw = localStorage.getItem(PANEL_SECTION_STATE_KEY);
+        if (!raw) return fallback;
+        return { ...fallback, ...JSON.parse(raw) };
+    } catch (e) {
+        return fallback;
+    }
+}
+
+function saveSectionState(state) {
+    try {
+        localStorage.setItem(PANEL_SECTION_STATE_KEY, JSON.stringify(state));
+    } catch (e) {}
+}
+
+function applySectionState(panel, nextState) {
+    const state = { settings: true, error: false, search: false, ...nextState };
+    ['settings', 'error', 'search'].forEach(key => {
+        const section = panel.querySelector(`[data-section="${key}"]`);
+        if (!section) return;
+        section.classList.toggle('is-collapsed', !state[key]);
+    });
+
+    const mappings = [
+        ['settings', '#btn-quick-settings', '#btn-toggle-settings-section'],
+        ['error', '#btn-quick-errors', '#btn-show-errors'],
+        ['search', '#btn-quick-search', '#btn-toggle-search-section'],
+    ];
+
+    mappings.forEach(([key, quickSelector, sectionSelector]) => {
+        const quickBtn = panel.querySelector(quickSelector);
+        const sectionBtn = panel.querySelector(sectionSelector);
+        [quickBtn, sectionBtn].forEach(btn => {
+            if (!btn) return;
+            btn.classList.toggle('active', !!state[key]);
+            btn.setAttribute('aria-expanded', state[key] ? 'true' : 'false');
+        });
+    });
+
+    saveSectionState(state);
+    return state;
+}
+
 // ==========================================
 // 2. 创建 UI 面板 (可拖动)
 // ==========================================
@@ -67,150 +202,257 @@ function createPanel() {
     const existingPanel = document.getElementById('weiqi-helper-panel');
     if (existingPanel) return existingPanel;
 
+    const panelState = loadPanelState();
+    const sectionState = loadSectionState();
     const panel = document.createElement('div');
     panel.id = 'weiqi-helper-panel';
     panel.innerHTML = `
-        <div id="weiqi-helper-header" style="cursor: move;">
-            <span>101围棋助手</span>
-            <span class="close-btn" title="收起">×</span>
+        <div id="weiqi-helper-header">
+            <div class="panel-title-group">
+                <span class="panel-title">101围棋助手</span>
+                <span id="header-mode-badge" class="panel-mode-badge">浏览模式</span>
+            </div>
+            <div class="panel-toolbar">
+                <button class="toolbar-preset-btn" type="button" data-preset="small" title="紧凑尺寸">小</button>
+                <button class="toolbar-preset-btn" type="button" data-preset="medium" title="标准尺寸">中</button>
+                <button class="toolbar-preset-btn" type="button" data-preset="large" title="扩展尺寸">大</button>
+                <button id="btn-minimize-panel" class="toolbar-icon-btn" type="button" title="最小化面板">－</button>
+                <button class="close-btn toolbar-icon-btn" type="button" title="关闭面板">×</button>
+            </div>
         </div>
         <div id="weiqi-helper-content">
-            <div id="helper-status" class="helper-info-block">
+            <div id="helper-status" class="helper-info-block status-card">
                 <span class="status-tag tag-wait">等待题目数据...</span>
             </div>
 
-            <div id="helper-mode-controls" style="margin-top:8px; border:1px solid #e5e7eb; border-radius:6px; padding:8px; background:#f9fafb;">
-                <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
-                    <span style="font-size:12px; color:#374151;">模式</span>
-                    <select id="helper-mode" style="font-size:12px; padding:2px 6px;">
-                        <option value="browse">浏览模式</option>
-                        <option value="practice">做题模式</option>
-                        <option value="book">棋书练习</option>
-                    </select>
-                </div>
-                <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                    <span style="font-size:12px; color:#374151;">限时(秒)</span>
-                    <input id="helper-time-limit" type="number" min="5" step="5" style="width:80px; font-size:12px; padding:2px 6px;" />
-                </div>
+            <div class="panel-quick-actions">
+                <button id="btn-quick-settings" class="quick-action-btn" type="button">设置</button>
+                <button id="btn-quick-errors" class="quick-action-btn quick-action-warn" type="button">
+                    <span>错题本</span>
+                    <span id="quick-errors-badge" class="quick-action-badge">0</span>
+                </button>
+                <button id="btn-quick-search" class="quick-action-btn" type="button">搜索</button>
             </div>
 
-            <div id="practice-stats" class="helper-info-block" style="display:none; margin-top:8px;"></div>
-            
-            <button id="btn-show-errors" class="helper-btn" style="background-color: #f59e0b; color: white; border: none;">📚 查看错题本</button>
-
-            <div id="error-book-area" class="error-book-area" style="display:none;">
-                <div class="error-book-header">
-                    <div>
-                        <div class="error-book-title">错题本</div>
-                        <div class="error-book-subtitle">仅做题模式下，错题重刷做对后会自动移出待复习列表</div>
+            <section id="helper-mode-section" class="panel-section-card" data-section="settings">
+                <button id="btn-toggle-settings-section" class="panel-section-header" type="button">
+                    <span>模式与限时</span>
+                    <span id="settings-section-hint" class="panel-section-hint">当前配置</span>
+                </button>
+                <div class="panel-section-body">
+                    <div id="helper-mode-controls" class="panel-settings-grid">
+                        <div class="panel-setting-row">
+                            <span class="panel-setting-label">模式</span>
+                            <select id="helper-mode" class="panel-input panel-select">
+                                <option value="browse">浏览模式</option>
+                                <option value="practice">做题模式</option>
+                                <option value="book">棋书练习</option>
+                            </select>
+                        </div>
+                        <div class="panel-setting-row">
+                            <span class="panel-setting-label">限时(秒)</span>
+                            <input id="helper-time-limit" type="number" min="5" step="5" class="panel-input panel-input-number" />
+                        </div>
                     </div>
-                    <button id="btn-clear-errors" class="helper-btn error-clear-btn">清空</button>
                 </div>
+            </section>
 
-                <div id="error-book-summary" class="error-book-summary"></div>
+            <div id="practice-stats" class="helper-info-block practice-stats-card" style="display:none; margin-top:8px;"></div>
 
-                <div class="error-book-toolbar">
-                    <button id="btn-error-filter-review" class="helper-btn error-filter-btn active">待复习</button>
-                    <button id="btn-error-filter-all" class="helper-btn error-filter-btn">全部</button>
-                    <button id="btn-error-filter-resolved" class="helper-btn error-filter-btn">已刷回</button>
+            <section id="error-book-section" class="panel-section-card" data-section="error">
+                <button id="btn-show-errors" class="panel-section-header panel-section-header-warn" type="button">
+                    <span>错题本重刷</span>
+                    <span id="error-section-hint" class="panel-section-hint">待复习 0</span>
+                </button>
+                <div class="panel-section-body">
+                    <div id="error-book-area" class="error-book-area">
+                        <div class="error-book-header">
+                            <div>
+                                <div class="error-book-title">错题本</div>
+                                <div class="error-book-subtitle">仅做题模式下，错题重刷做对后会自动移出待复习列表</div>
+                            </div>
+                            <button id="btn-clear-errors" class="helper-btn error-clear-btn">清空</button>
+                        </div>
+
+                        <div id="error-book-summary" class="error-book-summary"></div>
+
+                        <div class="error-book-toolbar">
+                            <button id="btn-error-filter-review" class="helper-btn error-filter-btn active">待复习</button>
+                            <button id="btn-error-filter-all" class="helper-btn error-filter-btn">全部</button>
+                            <button id="btn-error-filter-resolved" class="helper-btn error-filter-btn">已刷回</button>
+                        </div>
+
+                        <ul id="error-list" class="error-book-list">
+                            <li class="error-book-empty">加载中...</li>
+                        </ul>
+                    </div>
                 </div>
+            </section>
 
-                <ul id="error-list" class="error-book-list">
-                    <li class="error-book-empty">加载中...</li>
-                </ul>
-            </div>
-
-            <div id="book-practice-area" style="display:none; margin-top:10px; border:1px solid #8b5cf6; border-radius:6px; padding:8px; background:#faf5ff;">
-                <div style="font-weight:bold; font-size:12px; color:#7c3aed; margin-bottom:6px;">📘 棋书练习</div>
-                <div id="book-info" style="font-size:11px; color:#6b7280; margin-bottom:4px;"></div>
-                <div id="book-progress-bar" style="margin-bottom:6px;">
-                    <div style="background:#e5e7eb; border-radius:3px; height:6px; overflow:hidden;">
+            <div id="book-practice-area" class="panel-feature-card book-feature-card" style="display:none;">
+                <div class="feature-card-title">📘 棋书练习</div>
+                <div id="book-info" class="feature-card-meta"></div>
+                <div id="book-progress-bar" class="book-progress-wrap">
+                    <div class="book-progress-track">
                         <div id="book-progress-fill" style="background:#8b5cf6; height:100%; width:0%; transition:width 0.3s;"></div>
                     </div>
-                    <div id="book-progress-text" style="font-size:11px; color:#6b7280; margin-top:2px;"></div>
+                    <div id="book-progress-text" class="feature-card-meta feature-card-meta-tight"></div>
                 </div>
-                <div id="book-stats" style="font-size:11px; color:#4b5563; margin-bottom:6px;"></div>
-                <div style="display:flex; gap:4px; flex-wrap:wrap;">
-                    <button id="btn-book-prev" class="helper-btn book-nav-btn" style="flex:1; margin:0; padding:4px; font-size:11px;">⬅ 上一题</button>
-                    <button id="btn-book-next" class="helper-btn book-nav-btn" style="flex:1; margin:0; padding:4px; font-size:11px; background:#8b5cf6; color:white; border-color:#7c3aed;">下一题 ➡</button>
+                <div id="book-stats" class="feature-card-stats"></div>
+                <div class="feature-card-actions">
+                    <button id="btn-book-prev" class="helper-btn book-nav-btn feature-btn-secondary">⬅ 上一题</button>
+                    <button id="btn-book-next" class="helper-btn book-nav-btn feature-btn-primary">下一题 ➡</button>
                 </div>
-                <div style="display:flex; gap:4px; margin-top:4px;">
-                    <button id="btn-book-wrong-only" class="helper-btn book-nav-btn" style="flex:1; margin:0; padding:4px; font-size:11px;">🔴 仅错题</button>
-                    <button id="btn-book-reset" class="helper-btn book-nav-btn" style="flex:1; margin:0; padding:4px; font-size:11px;">🔄 重置本章</button>
+                <div class="feature-card-actions feature-card-actions-tight">
+                    <button id="btn-book-wrong-only" class="helper-btn book-nav-btn feature-btn-secondary">🔴 仅错题</button>
+                    <button id="btn-book-reset" class="helper-btn book-nav-btn feature-btn-danger">🔄 重置本章</button>
                 </div>
             </div>
 
-            <div id="book-search-area" style="margin-top:10px; border-top: 1px solid #e5e7eb; padding-top: 10px;">
-                <div style="font-weight: bold; font-size: 12px; margin-bottom: 6px;">📖 棋书搜索</div>
-                <div style="display:flex; gap:4px;">
-                    <input id="book-search-input" type="text" placeholder="书名 / 作者 / 难度"
-                           style="flex:1; font-size:12px; padding:4px 6px; border:1px solid #d1d5db; border-radius:4px; outline:none;" />
-                    <button id="btn-book-search" class="helper-btn" style="width:auto; margin:0; padding:4px 10px; background:#3b82f6; color:white; border-color:#2563eb; font-size:12px;">搜索</button>
+            <section id="book-search-section" class="panel-section-card" data-section="search">
+                <button id="btn-toggle-search-section" class="panel-section-header" type="button">
+                    <span>棋书搜索</span>
+                    <span class="panel-section-hint">367 本可搜</span>
+                </button>
+                <div class="panel-section-body">
+                    <div id="book-search-area" class="search-section-body">
+                        <div class="search-input-row">
+                            <input id="book-search-input" type="text" placeholder="书名 / 作者 / 难度" class="panel-input search-input" />
+                            <button id="btn-book-search" class="helper-btn search-btn">搜索</button>
+                        </div>
+                        <div id="book-search-status" class="search-status" style="display:none;"></div>
+                        <ul id="book-search-results" class="search-results-list">
+                            <li class="search-empty">输入关键词搜索棋书...</li>
+                        </ul>
+                    </div>
                 </div>
-                <div id="book-search-status" style="font-size:11px; color:#999; margin-top:4px; display:none;"></div>
-                <ul id="book-search-results" style="list-style:none; padding:0; margin:6px 0 0 0; font-size:12px; max-height:200px; overflow-y:auto;">
-                    <li style="color: #999; padding: 6px 0;">输入关键词搜索棋书...</li>
-                </ul>
-            </div>
+            </section>
         </div>
+        <div id="weiqi-helper-resizer" title="拖拽调整尺寸"></div>
     `;
     document.body.appendChild(panel);
+    applyPanelState(panel, panelState);
+    applySectionState(panel, sectionState);
 
-    // --- 拖动逻辑 ---
     const header = panel.querySelector('#weiqi-helper-header');
+    const resizer = panel.querySelector('#weiqi-helper-resizer');
+    const closeBtn = panel.querySelector('.close-btn');
+    const minimizeBtn = panel.querySelector('#btn-minimize-panel');
     let isDragging = false;
+    let isResizing = false;
     let offsetX, offsetY;
+    let startWidth, startHeight, startX, startY;
+
+    function persistCurrentPanelState(patch = {}) {
+        const nextState = { ...getPanelStateFromDom(panel), ...patch };
+        return applyPanelState(panel, nextState);
+    }
+
+    function toggleSection(key) {
+        const current = loadSectionState();
+        current[key] = !current[key];
+        applySectionState(panel, current);
+    }
+
+    function updateModeDecorations() {
+        const modeLabels = { browse: '浏览模式', practice: '做题模式', book: '棋书练习' };
+        const badge = panel.querySelector('#header-mode-badge');
+        if (badge) badge.textContent = modeLabels[helperMode] || helperMode;
+        const settingsHint = panel.querySelector('#settings-section-hint');
+        if (settingsHint) settingsHint.textContent = `${modeLabels[helperMode] || helperMode} · ${practiceTimeLimitSec}s`;
+    }
+
+    panel.querySelectorAll('.toolbar-preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const preset = PANEL_PRESETS[btn.dataset.preset];
+            if (!preset) return;
+            const current = getPanelStateFromDom(panel);
+            persistCurrentPanelState({
+                width: preset.width,
+                height: preset.height,
+                minimized: false,
+                preset: btn.dataset.preset,
+                left: clamp(current.left, 8, Math.max(8, window.innerWidth - preset.width - 8)),
+                top: clamp(current.top, 8, Math.max(8, window.innerHeight - preset.height - 8)),
+            });
+        });
+    });
+
+    minimizeBtn.addEventListener('click', () => {
+        const current = getPanelStateFromDom(panel);
+        persistCurrentPanelState({ minimized: !current.minimized });
+    });
 
     header.addEventListener('mousedown', (e) => {
-        if (e.target.classList.contains('close-btn')) return;
+        if (e.target.closest('.panel-toolbar')) return;
         isDragging = true;
         offsetX = e.clientX - panel.getBoundingClientRect().left;
         offsetY = e.clientY - panel.getBoundingClientRect().top;
-        panel.style.transition = 'none'; // 拖动时取消动画，防止卡顿
+        panel.style.transition = 'none';
+    });
+
+    resizer.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        isResizing = true;
+        const rect = panel.getBoundingClientRect();
+        startWidth = rect.width;
+        startHeight = rect.height;
+        startX = e.clientX;
+        startY = e.clientY;
+        panel.style.transition = 'none';
     });
 
     document.addEventListener('mousemove', (e) => {
-        if (!isDragging) return;
-        let newX = e.clientX - offsetX;
-        let newY = e.clientY - offsetY;
-        
-        // 边界检查，防止拖出屏幕
-        const maxX = window.innerWidth - panel.offsetWidth;
-        const maxY = window.innerHeight - panel.offsetHeight;
-        newX = Math.max(0, Math.min(newX, maxX));
-        newY = Math.max(0, Math.min(newY, maxY));
-
-        panel.style.left = newX + 'px';
-        panel.style.top = newY + 'px';
-        panel.style.right = 'auto'; // 覆盖默认的 right 定位
-        panel.style.bottom = 'auto'; // 覆盖默认的 bottom 定位
+        if (isDragging) {
+            const rect = panel.getBoundingClientRect();
+            const newX = clamp(e.clientX - offsetX, 8, Math.max(8, window.innerWidth - rect.width - 8));
+            const newY = clamp(e.clientY - offsetY, 8, Math.max(8, window.innerHeight - rect.height - 8));
+            panel.style.left = `${newX}px`;
+            panel.style.top = `${newY}px`;
+            panel.style.right = 'auto';
+            panel.style.bottom = 'auto';
+        } else if (isResizing) {
+            const current = getPanelStateFromDom(panel);
+            const nextWidth = clamp(startWidth + (e.clientX - startX), 280, Math.max(280, window.innerWidth - current.left - 8));
+            const nextHeight = clamp(startHeight + (e.clientY - startY), 240, Math.max(240, window.innerHeight - current.top - 8));
+            panel.style.width = `${nextWidth}px`;
+            panel.style.height = `${nextHeight}px`;
+            panel.dataset.preset = '';
+            panel.querySelectorAll('.toolbar-preset-btn').forEach(btn => btn.classList.remove('active'));
+        }
     });
 
     document.addEventListener('mouseup', () => {
+        if (isDragging || isResizing) {
+            persistCurrentPanelState();
+        }
         isDragging = false;
-        panel.style.transition = ''; // 恢复动画
+        isResizing = false;
+        panel.style.transition = '';
     });
-    // --- 拖动逻辑结束 ---
 
-    // 绑定关闭按钮
-    panel.querySelector('.close-btn').addEventListener('click', () => {
+    window.addEventListener('resize', () => {
+        applyPanelState(panel, getPanelStateFromDom(panel));
+    });
+
+    closeBtn.addEventListener('click', () => {
         panel.style.display = 'none';
     });
-    
-    // 绑定查看错题本按钮
-    panel.querySelector('#btn-show-errors').addEventListener('click', () => {
-        const area = document.getElementById('error-book-area');
-        if (area.style.display === 'none') {
-            area.style.display = 'block';
-            panel.querySelector('#btn-show-errors').textContent = '📚 收起错题本';
-            renderErrorBook(currentErrorFilter);
-        } else {
-            area.style.display = 'none';
-            panel.querySelector('#btn-show-errors').textContent = '📚 查看错题本';
-        }
+
+    panel.querySelector('#btn-quick-settings').addEventListener('click', () => toggleSection('settings'));
+    panel.querySelector('#btn-quick-errors').addEventListener('click', () => {
+        toggleSection('error');
+        if (loadSectionState().error) renderErrorBook(currentErrorFilter);
     });
-    
-    // 绑定清空错题本按钮
+    panel.querySelector('#btn-quick-search').addEventListener('click', () => toggleSection('search'));
+    panel.querySelector('#btn-toggle-settings-section').addEventListener('click', () => toggleSection('settings'));
+    panel.querySelector('#btn-show-errors').addEventListener('click', () => {
+        toggleSection('error');
+        if (loadSectionState().error) renderErrorBook(currentErrorFilter);
+    });
+    panel.querySelector('#btn-toggle-search-section').addEventListener('click', () => toggleSection('search'));
+
     panel.querySelector('#btn-clear-errors').addEventListener('click', () => {
         if (confirm('确定要清空所有错题记录吗？')) {
             clearErrorBook().then(() => renderErrorBook(currentErrorFilter));
@@ -323,6 +565,7 @@ function createPanel() {
     const limitInput = panel.querySelector('#helper-time-limit');
     modeSelect.value = helperMode;
     limitInput.value = String(practiceTimeLimitSec);
+    updateModeDecorations();
 
     modeSelect.addEventListener('change', () => {
         const val = modeSelect.value;
@@ -338,6 +581,7 @@ function createPanel() {
         if (helperMode === 'book' && isOnBookQuestionPage()) {
             initBookPractice();
         }
+        updateModeDecorations();
         updateUI(currentDisplayResult);
     });
 
@@ -356,6 +600,7 @@ function createPanel() {
                 state.deadlineAt = now + practiceTimeLimitSec * 1000;
             }
         }
+        updateModeDecorations();
         updateUI(currentDisplayResult);
     });
 
@@ -462,6 +707,11 @@ function renderErrorBookSummary(summaryEl, allErrors) {
         );
         return wrapper;
     }));
+
+    const quickBadge = document.getElementById('quick-errors-badge');
+    if (quickBadge) quickBadge.textContent = String(reviewing);
+    const errorHint = document.getElementById('error-section-hint');
+    if (errorHint) errorHint.textContent = `待复习 ${reviewing}`;
 }
 
 function createErrorBookCard(err) {
@@ -1250,39 +1500,47 @@ function updateUI(answerResult) {
     if (!statusDiv || !currentProblemData) return;
 
     const modeLabels = { browse: '👀 浏览模式', practice: '📝 做题模式', book: '📘 棋书练习' };
-    let statusHtml = `<span class="status-tag tag-success">数据捕获成功</span>`;
-    statusHtml += `<div style="margin-top:4px; font-size:12px; color:#374151;">当前模式：${modeLabels[helperMode] || helperMode}</div>`;
-
-    if (currentProblemData.publicid) {
-        statusHtml += `<div style="margin-top:4px; font-size:12px; color:#666;">题目 Q-${currentProblemData.publicid} | ${currentProblemData.levelname || ''} | ${currentProblemData.qtypename || ''}</div>`;
-    }
-
-    // null/undefined 统一视为 0（尚未作答）
     const finalResult = (answerResult === null || answerResult === undefined) ? 0 : answerResult;
+    const toneClass = finalResult === 1 ? 'is-success' : finalResult === 2 ? 'is-fail' : 'is-pending';
+    const resultText = finalResult === 1 ? '✅ 本题已通过' : finalResult === 2 ? '❌ 本题未通过' : '⏳ 尚未作答';
+    const historyText = currentProblemHistory
+        ? `${currentProblemHistory.correctCount || 0} 对 / ${currentProblemHistory.errorCount || 0} 错`
+        : '初次挑战';
 
-    if (finalResult === 1) {
-        statusHtml += `<div style="margin-top:4px; font-weight:bold; color:#059669;">✅ 本题已通过</div>`;
-    } else if (finalResult === 2) {
-        statusHtml += `<div style="margin-top:4px; font-weight:bold; color:#dc2626;">❌ 本题未通过</div>`;
-    } else {
-        statusHtml += `<div style="margin-top:4px; font-weight:bold; color:#d97706;">⏳ 尚未作答</div>`;
-    }
+    statusDiv.className = `helper-info-block status-card ${toneClass}`;
+
+    let statusHtml = `
+        <div class="status-card-head">
+            <span class="status-tag tag-success">数据捕获成功</span>
+            <span class="status-mode-pill">${modeLabels[helperMode] || helperMode}</span>
+        </div>
+        <div class="status-card-main">${resultText}</div>
+        <div class="status-card-meta-row">
+            <span class="status-meta-pill">题目 Q-${currentProblemData.publicid || '?'}</span>
+            <span class="status-meta-pill">${currentProblemData.levelname || '未知难度'}</span>
+            <span class="status-meta-pill">${currentProblemData.qtypename || '未知题型'}</span>
+        </div>
+    `;
 
     if (helperMode === 'practice' || helperMode === 'book') {
         const countdown = (currentCountdownSec === null) ? '--:--' : formatCountdown(currentCountdownSec);
-        statusHtml += `<div style="margin-top:6px; font-size:12px; color:#111827;">⏱️ 本题限时：${practiceTimeLimitSec}s | 剩余：${countdown}</div>`;
+        const countdownClass = (currentCountdownSec !== null && currentCountdownSec <= 10) ? 'is-warning' : '';
+        statusHtml += `
+            <div class="status-card-timer-row ${countdownClass}">
+                <span>⏱️ 本题限时 ${practiceTimeLimitSec}s</span>
+                <strong>剩余 ${countdown}</strong>
+            </div>
+        `;
     }
 
-    // 渲染历史战绩
-    if (currentProblemHistory) {
-        const correct = currentProblemHistory.correctCount || 0;
-        const error = currentProblemHistory.errorCount || 0;
-        statusHtml += `<div style="margin-top:8px; font-size:12px; color:#4b5563; text-align:center; background:#f3f4f6; padding:4px; border-radius:4px;">📊 历史战绩：${correct}对 ${error}错</div>`;
-    } else {
-        statusHtml += `<div style="margin-top:8px; font-size:12px; color:#4b5563; text-align:center; background:#f3f4f6; padding:4px; border-radius:4px;">📊 历史战绩：初次挑战</div>`;
-    }
+    statusHtml += `<div class="status-card-history">📚 历史战绩：${historyText}</div>`;
 
     statusDiv.innerHTML = statusHtml;
+
+    const headerBadge = document.getElementById('header-mode-badge');
+    if (headerBadge) headerBadge.textContent = modeLabels[helperMode] || helperMode;
+    const settingsHint = document.getElementById('settings-section-hint');
+    if (settingsHint) settingsHint.textContent = `${modeLabels[helperMode] || helperMode} · ${practiceTimeLimitSec}s`;
 
     // 棋书练习区渲染
     const bookArea = document.getElementById('book-practice-area');
@@ -1313,6 +1571,7 @@ function updateUI(answerResult) {
     if (statsDiv) {
         if (helperMode === 'practice') {
             statsDiv.style.display = 'block';
+            statsDiv.className = 'helper-info-block practice-stats-card';
             statsDiv.innerHTML = getCurrentPracticeStatsText();
         } else {
             statsDiv.style.display = 'none';
