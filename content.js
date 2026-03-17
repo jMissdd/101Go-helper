@@ -582,6 +582,18 @@ function createPanel() {
             initBookPractice();
         }
         updateModeDecorations();
+        // 切换模式时自动调整分区展开状态（只在用户主动切换时触发一次）
+        {
+            const sects = loadSectionState();
+            if (helperMode === 'book') {
+                // 棋书模式：展开搜索（找书），收起错题本（减少拥挤）
+                applySectionState(panel, { ...sects, search: true, error: false });
+            } else if (helperMode === 'practice') {
+                // 做题模式：收起搜索（做题时用不到），保留其他
+                applySectionState(panel, { ...sects, search: false });
+            }
+            // browse 模式不自动调整，保持用户上一次的状态
+        }
         updateUI(currentDisplayResult);
     });
 
@@ -627,6 +639,12 @@ const TRUSTED_101_HOSTS = new Set([
     'www.101weiqi.cn',
     '101weiqi.cn',
 ]);
+
+// 根据当前域名返回正确的 101 基础 URL（同时兼容 .cn 和 .com）
+function get101BaseUrl() {
+    const host = window.location.hostname;
+    return host.endsWith('.com') ? 'https://www.101weiqi.com' : 'https://www.101weiqi.cn';
+}
 
 function getDifficultyRank(levelname) {
     if (!levelname) return 9999;
@@ -1073,7 +1091,7 @@ async function fetchChapterFullQs(bookId, chapterId) {
     let allQs = [];
     try {
         // 先抓第1页获取 maxpage
-        const url1 = `https://www.101weiqi.cn/book/${bookId}/${chapterId}/?page=1`;
+        const url1 = `${get101BaseUrl()}/book/${bookId}/${chapterId}/?page=1`;
         const html1 = await fetch(url1).then(r => r.text());
         const nd1 = extractNodedata(html1);
         if (!nd1) return [];
@@ -1084,7 +1102,7 @@ async function fetchChapterFullQs(bookId, chapterId) {
         if (maxpage > 1) {
             const promises = [];
             for (let p = 2; p <= maxpage; p++) {
-                const urlP = `https://www.101weiqi.cn/book/${bookId}/${chapterId}/?page=${p}`;
+                const urlP = `${get101BaseUrl()}/book/${bookId}/${chapterId}/?page=${p}`;
                 promises.push(fetch(urlP).then(r => r.text()).then(extractNodedata));
             }
             const pages = await Promise.all(promises);
@@ -1192,7 +1210,7 @@ function getPrevBookQid() {
  */
 function goToBookQuestion(qid) {
     if (!bookContext) return;
-    window.location.href = `https://www.101weiqi.cn/book/${bookContext.bookId}/${bookContext.chapterId}/${qid}/`;
+    window.location.href = `${get101BaseUrl()}/book/${bookContext.bookId}/${bookContext.chapterId}/${qid}/`;
 }
 
 /**
@@ -1283,7 +1301,7 @@ async function fetchBookList() {
 
     // 从服务器获取
     try {
-        const resp = await fetch('https://www.101weiqi.cn/book/list/');
+        const resp = await fetch(`${get101BaseUrl()}/book/list/`);
         const html = await resp.text();
         const match = html.match(/var\s+g_books\s*=\s*(\[[\s\S]*?\]);/);
         if (!match) {
@@ -1338,7 +1356,7 @@ function renderBookSearchResults(results, keyword) {
         const descSnippet = b.shortdesc ? b.shortdesc.substring(0, 30) : '';
         li.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center;">
-                <a href="https://www.101weiqi.cn/book/${b.id}/" target="_blank"
+                <a href="${get101BaseUrl()}/book/${b.id}/" target="_blank"
                    style="color:#2563eb; text-decoration:none; font-weight:bold; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                     ${b.name}
                 </a>

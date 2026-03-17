@@ -840,15 +840,18 @@
 
 #weiqi-helper-resizer {
     position: absolute;
-    right: 0;
-    bottom: 0;
-    width: 18px;
-    height: 18px;
+    right: 6px;
+    bottom: 6px;
+    width: 20px;
+    height: 20px;
     cursor: nwse-resize;
+    z-index: 10;
+    /* 对角条纹，缩进后确保在圆角内可见 */
     background:
-        linear-gradient(135deg, transparent 0 38%, rgba(148, 163, 184, 0.38) 38% 46%, transparent 46% 100%),
-        linear-gradient(135deg, transparent 0 58%, rgba(148, 163, 184, 0.58) 58% 66%, transparent 66% 100%),
-        linear-gradient(135deg, transparent 0 78%, rgba(148, 163, 184, 0.78) 78% 86%, transparent 86% 100%);
+        linear-gradient(135deg, transparent 0 30%, rgba(100, 116, 139, 0.45) 30% 42%, transparent 42% 100%),
+        linear-gradient(135deg, transparent 0 52%, rgba(100, 116, 139, 0.65) 52% 64%, transparent 64% 100%),
+        linear-gradient(135deg, transparent 0 74%, rgba(100, 116, 139, 0.85) 74% 86%, transparent 86% 100%);
+    border-radius: 0 0 4px 0;
 }
 
 @media (max-width: 480px) {
