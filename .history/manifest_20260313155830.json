@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "101围棋助手",
+  "version": "1.0",
+  "description": "101围棋网的功能增强工具，提供错题统计、棋书增强等功能",
+  "web_accessible_resources": [
+    {
+      "resources": ["inject.js"],
+      "matches": [
+        "*://*.101weiqi.cn/*",
+        "*://*.101weiqi.com/*"
+      ]
+    }
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://www.101weiqi.cn/*",
+        "*://101weiqi.cn/*",
+        "*://www.101weiqi.com/*",
+        "*://101weiqi.com/*"
+      ],
+      "css": ["style.css"],
+      "js": ["content.js"]
+    }
+  ]
+}

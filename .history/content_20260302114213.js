@@ -8,13 +8,6 @@ s.onload = function() { this.remove(); };
 
 const MODE_KEY = 'weiqi_helper_mode';
 const LIMIT_KEY = 'weiqi_helper_time_limit_sec';
-const PANEL_UI_STATE_KEY = 'weiqi_helper_panel_ui_state_v1';
-const PANEL_SECTION_STATE_KEY = 'weiqi_helper_panel_sections_v1';
-const PANEL_PRESETS = {
-    small: { width: 300, height: 340 },
-    medium: { width: 360, height: 560 },
-    large: { width: 440, height: 720 },
-};
 
 let helperMode = localStorage.getItem(MODE_KEY) || 'browse'; // browse | practice | book
 let practiceTimeLimitSec = parseInt(localStorage.getItem(LIMIT_KEY) || '60', 10);
@@ -33,8 +26,6 @@ const practiceSession = {
 let currentDisplayResult = 0;
 let currentCountdownSec = null;
 let practiceTimerHandle = null;
-let currentErrorFilter = 'needReview';
-let errorBookRenderToken = 0;
 
 function ensurePracticeState(qid, problemData) {
     if (!qid) return null;
@@ -67,422 +58,110 @@ function formatCountdown(sec) {
     return `${mm}:${ss}`;
 }
 
-function clamp(value, min, max) {
-    return Math.max(min, Math.min(value, max));
-}
-
-function getDefaultPanelState() {
-    const preset = PANEL_PRESETS.medium;
-    return {
-        width: preset.width,
-        height: preset.height,
-        top: 60,
-        left: Math.max(12, window.innerWidth - preset.width - 20),
-        minimized: false,
-        preset: 'medium',
-    };
-}
-
-function loadPanelState() {
-    const fallback = getDefaultPanelState();
-    try {
-        const raw = localStorage.getItem(PANEL_UI_STATE_KEY);
-        if (!raw) return fallback;
-        return { ...fallback, ...JSON.parse(raw) };
-    } catch (e) {
-        return fallback;
-    }
-}
-
-function savePanelState(state) {
-    try {
-        localStorage.setItem(PANEL_UI_STATE_KEY, JSON.stringify(state));
-    } catch (e) {}
-}
-
-function normalizePanelState(state) {
-    const fallback = getDefaultPanelState();
-    const width = clamp(Number(state.width) || fallback.width, 280, Math.max(280, window.innerWidth - 24));
-    const height = clamp(Number(state.height) || fallback.height, 240, Math.max(240, window.innerHeight - 24));
-    const minimized = !!state.minimized;
-    const visibleHeight = minimized ? 58 : height;
-    const left = clamp(Number(state.left) || fallback.left, 8, Math.max(8, window.innerWidth - width - 8));
-    const top = clamp(Number(state.top) || fallback.top, 8, Math.max(8, window.innerHeight - visibleHeight - 8));
-    const preset = PANEL_PRESETS[state.preset] ? state.preset : '';
-    return { width, height, left, top, minimized, preset };
-}
-
-function applyPanelState(panel, nextState) {
-    const state = normalizePanelState(nextState);
-    panel.style.width = `${state.width}px`;
-    panel.style.height = state.minimized ? 'auto' : `${state.height}px`;
-    panel.style.left = `${state.left}px`;
-    panel.style.top = `${state.top}px`;
-    panel.style.right = 'auto';
-    panel.style.bottom = 'auto';
-    panel.classList.toggle('is-minimized', state.minimized);
-    panel.dataset.preset = state.preset || '';
-
-    panel.querySelectorAll('.toolbar-preset-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.preset === state.preset);
-    });
-
-    const minimizeBtn = panel.querySelector('#btn-minimize-panel');
-    if (minimizeBtn) {
-        minimizeBtn.textContent = state.minimized ? '▣' : '－';
-        minimizeBtn.title = state.minimized ? '展开面板' : '最小化面板';
-    }
-
-    savePanelState(state);
-    return state;
-}
-
-function getPanelStateFromDom(panel) {
-    const rect = panel.getBoundingClientRect();
-    const saved = loadPanelState();
-    return normalizePanelState({
-        width: Math.round(rect.width),
-        height: panel.classList.contains('is-minimized') ? saved.height : Math.round(rect.height),
-        left: Math.round(rect.left),
-        top: Math.round(rect.top),
-        minimized: panel.classList.contains('is-minimized'),
-        preset: panel.dataset.preset || '',
-    });
-}
-
-function loadSectionState() {
-    const fallback = { settings: true, error: false, search: false };
-    try {
-        const raw = localStorage.getItem(PANEL_SECTION_STATE_KEY);
-        if (!raw) return fallback;
-        return { ...fallback, ...JSON.parse(raw) };
-    } catch (e) {
-        return fallback;
-    }
-}
-
-function saveSectionState(state) {
-    try {
-        localStorage.setItem(PANEL_SECTION_STATE_KEY, JSON.stringify(state));
-    } catch (e) {}
-}
-
-function applySectionState(panel, nextState) {
-    const state = { settings: true, error: false, search: false, ...nextState };
-    ['settings', 'error', 'search'].forEach(key => {
-        const section = panel.querySelector(`[data-section="${key}"]`);
-        if (!section) return;
-        section.classList.toggle('is-collapsed', !state[key]);
-    });
-
-    const mappings = [
-        ['settings', '#btn-quick-settings', '#btn-toggle-settings-section'],
-        ['error', '#btn-quick-errors', '#btn-show-errors'],
-        ['search', '#btn-quick-search', '#btn-toggle-search-section'],
-    ];
-
-    mappings.forEach(([key, quickSelector, sectionSelector]) => {
-        const quickBtn = panel.querySelector(quickSelector);
-        const sectionBtn = panel.querySelector(sectionSelector);
-        [quickBtn, sectionBtn].forEach(btn => {
-            if (!btn) return;
-            btn.classList.toggle('active', !!state[key]);
-            btn.setAttribute('aria-expanded', state[key] ? 'true' : 'false');
-        });
-    });
-
-    saveSectionState(state);
-    return state;
-}
-
 // ==========================================
-// 2. 创建 UI 面板 (可拖动)
+// 2. 创建 UI 面板
 // ==========================================
 function createPanel() {
     const existingPanel = document.getElementById('weiqi-helper-panel');
     if (existingPanel) return existingPanel;
 
-    const panelState = loadPanelState();
-    const sectionState = loadSectionState();
     const panel = document.createElement('div');
     panel.id = 'weiqi-helper-panel';
     panel.innerHTML = `
         <div id="weiqi-helper-header">
-            <div class="panel-title-group">
-                <span class="panel-title">101围棋助手</span>
-                <span id="header-mode-badge" class="panel-mode-badge">浏览模式</span>
-            </div>
-            <div class="panel-toolbar">
-                <button class="toolbar-preset-btn" type="button" data-preset="small" title="紧凑尺寸">小</button>
-                <button class="toolbar-preset-btn" type="button" data-preset="medium" title="标准尺寸">中</button>
-                <button class="toolbar-preset-btn" type="button" data-preset="large" title="扩展尺寸">大</button>
-                <button id="btn-minimize-panel" class="toolbar-icon-btn" type="button" title="最小化面板">－</button>
-                <button class="close-btn toolbar-icon-btn" type="button" title="关闭面板">×</button>
-            </div>
+            <span>101围棋助手</span>
+            <span class="close-btn" title="收起">×</span>
         </div>
         <div id="weiqi-helper-content">
-            <div id="helper-status" class="helper-info-block status-card">
+            <div id="helper-status" class="helper-info-block">
                 <span class="status-tag tag-wait">等待题目数据...</span>
             </div>
 
-            <div class="panel-quick-actions">
-                <button id="btn-quick-settings" class="quick-action-btn" type="button">设置</button>
-                <button id="btn-quick-errors" class="quick-action-btn quick-action-warn" type="button">
-                    <span>错题本</span>
-                    <span id="quick-errors-badge" class="quick-action-badge">0</span>
-                </button>
-                <button id="btn-quick-search" class="quick-action-btn" type="button">搜索</button>
+            <div id="helper-mode-controls" style="margin-top:8px; border:1px solid #e5e7eb; border-radius:6px; padding:8px; background:#f9fafb;">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
+                    <span style="font-size:12px; color:#374151;">模式</span>
+                    <select id="helper-mode" style="font-size:12px; padding:2px 6px;">
+                        <option value="browse">浏览模式</option>
+                        <option value="practice">做题模式</option>
+                        <option value="book">棋书练习</option>
+                    </select>
+                </div>
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                    <span style="font-size:12px; color:#374151;">限时(秒)</span>
+                    <input id="helper-time-limit" type="number" min="5" step="5" style="width:80px; font-size:12px; padding:2px 6px;" />
+                </div>
             </div>
 
-            <section id="helper-mode-section" class="panel-section-card" data-section="settings">
-                <button id="btn-toggle-settings-section" class="panel-section-header" type="button">
-                    <span>模式与限时</span>
-                    <span id="settings-section-hint" class="panel-section-hint">当前配置</span>
-                </button>
-                <div class="panel-section-body">
-                    <div id="helper-mode-controls" class="panel-settings-grid">
-                        <div class="panel-setting-row">
-                            <span class="panel-setting-label">模式</span>
-                            <select id="helper-mode" class="panel-input panel-select">
-                                <option value="browse">浏览模式</option>
-                                <option value="practice">做题模式</option>
-                                <option value="book">棋书练习</option>
-                            </select>
-                        </div>
-                        <div class="panel-setting-row">
-                            <span class="panel-setting-label">限时(秒)</span>
-                            <input id="helper-time-limit" type="number" min="5" step="5" class="panel-input panel-input-number" />
-                        </div>
-                    </div>
-                </div>
-            </section>
+            <div id="practice-stats" class="helper-info-block" style="display:none; margin-top:8px;"></div>
+            
+            <button id="btn-show-errors" class="helper-btn" style="background-color: #f59e0b; color: white; border: none;">📚 查看错题本</button>
+            
+            <div id="error-book-area" style="display:none; margin-top:10px; max-height: 200px; overflow-y: auto; border-top: 1px solid #eee; padding-top: 10px;">
+                <div style="font-weight: bold; margin-bottom: 5px;">我的错题本</div>
+                <ul id="error-list" style="list-style: none; padding: 0; margin: 0; font-size: 12px;">
+                    <li style="color: #666;">加载中...</li>
+                </ul>
+                <button id="btn-clear-errors" style="margin-top: 10px; font-size: 11px; padding: 2px 5px; cursor: pointer;">清空错题本</button>
+            </div>
 
-            <div id="practice-stats" class="helper-info-block practice-stats-card" style="display:none; margin-top:8px;"></div>
-
-            <section id="error-book-section" class="panel-section-card" data-section="error">
-                <button id="btn-show-errors" class="panel-section-header panel-section-header-warn" type="button">
-                    <span>错题本重刷</span>
-                    <span id="error-section-hint" class="panel-section-hint">待复习 0</span>
-                </button>
-                <div class="panel-section-body">
-                    <div id="error-book-area" class="error-book-area">
-                        <div class="error-book-header">
-                            <div>
-                                <div class="error-book-title">错题本</div>
-                                <div class="error-book-subtitle">仅做题模式下，错题重刷做对后会自动移出待复习列表</div>
-                            </div>
-                            <button id="btn-clear-errors" class="helper-btn error-clear-btn">清空</button>
-                        </div>
-
-                        <div id="error-book-summary" class="error-book-summary"></div>
-
-                        <div class="error-book-toolbar">
-                            <button id="btn-error-filter-review" class="helper-btn error-filter-btn active">待复习</button>
-                            <button id="btn-error-filter-all" class="helper-btn error-filter-btn">全部</button>
-                            <button id="btn-error-filter-resolved" class="helper-btn error-filter-btn">已刷回</button>
-                        </div>
-
-                        <ul id="error-list" class="error-book-list">
-                            <li class="error-book-empty">加载中...</li>
-                        </ul>
-                    </div>
-                </div>
-            </section>
-
-            <div id="book-practice-area" class="panel-feature-card book-feature-card" style="display:none;">
-                <div class="feature-card-title">📘 棋书练习</div>
-                <div id="book-info" class="feature-card-meta"></div>
-                <div id="book-progress-bar" class="book-progress-wrap">
-                    <div class="book-progress-track">
+            <div id="book-practice-area" style="display:none; margin-top:10px; border:1px solid #8b5cf6; border-radius:6px; padding:8px; background:#faf5ff;">
+                <div style="font-weight:bold; font-size:12px; color:#7c3aed; margin-bottom:6px;">📘 棋书练习</div>
+                <div id="book-info" style="font-size:11px; color:#6b7280; margin-bottom:4px;"></div>
+                <div id="book-progress-bar" style="margin-bottom:6px;">
+                    <div style="background:#e5e7eb; border-radius:3px; height:6px; overflow:hidden;">
                         <div id="book-progress-fill" style="background:#8b5cf6; height:100%; width:0%; transition:width 0.3s;"></div>
                     </div>
-                    <div id="book-progress-text" class="feature-card-meta feature-card-meta-tight"></div>
+                    <div id="book-progress-text" style="font-size:11px; color:#6b7280; margin-top:2px;"></div>
                 </div>
-                <div id="book-stats" class="feature-card-stats"></div>
-                <div class="feature-card-actions">
-                    <button id="btn-book-prev" class="helper-btn book-nav-btn feature-btn-secondary">⬅ 上一题</button>
-                    <button id="btn-book-next" class="helper-btn book-nav-btn feature-btn-primary">下一题 ➡</button>
+                <div id="book-stats" style="font-size:11px; color:#4b5563; margin-bottom:6px;"></div>
+                <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                    <button id="btn-book-prev" class="helper-btn book-nav-btn" style="flex:1; margin:0; padding:4px; font-size:11px;">⬅ 上一题</button>
+                    <button id="btn-book-next" class="helper-btn book-nav-btn" style="flex:1; margin:0; padding:4px; font-size:11px; background:#8b5cf6; color:white; border-color:#7c3aed;">下一题 ➡</button>
                 </div>
-                <div class="feature-card-actions feature-card-actions-tight">
-                    <button id="btn-book-wrong-only" class="helper-btn book-nav-btn feature-btn-secondary">🔴 仅错题</button>
-                    <button id="btn-book-reset" class="helper-btn book-nav-btn feature-btn-danger">🔄 重置本章</button>
+                <div style="display:flex; gap:4px; margin-top:4px;">
+                    <button id="btn-book-wrong-only" class="helper-btn book-nav-btn" style="flex:1; margin:0; padding:4px; font-size:11px;">🔴 仅错题</button>
+                    <button id="btn-book-reset" class="helper-btn book-nav-btn" style="flex:1; margin:0; padding:4px; font-size:11px;">🔄 重置本章</button>
                 </div>
             </div>
 
-            <section id="book-search-section" class="panel-section-card" data-section="search">
-                <button id="btn-toggle-search-section" class="panel-section-header" type="button">
-                    <span>棋书搜索</span>
-                    <span class="panel-section-hint">367 本可搜</span>
-                </button>
-                <div class="panel-section-body">
-                    <div id="book-search-area" class="search-section-body">
-                        <div class="search-input-row">
-                            <input id="book-search-input" type="text" placeholder="书名 / 作者 / 难度" class="panel-input search-input" />
-                            <button id="btn-book-search" class="helper-btn search-btn">搜索</button>
-                        </div>
-                        <div id="book-search-status" class="search-status" style="display:none;"></div>
-                        <ul id="book-search-results" class="search-results-list">
-                            <li class="search-empty">输入关键词搜索棋书...</li>
-                        </ul>
-                    </div>
+            <div id="book-search-area" style="margin-top:10px; border-top: 1px solid #e5e7eb; padding-top: 10px;">
+                <div style="font-weight: bold; font-size: 12px; margin-bottom: 6px;">📖 棋书搜索</div>
+                <div style="display:flex; gap:4px;">
+                    <input id="book-search-input" type="text" placeholder="书名 / 作者 / 难度"
+                           style="flex:1; font-size:12px; padding:4px 6px; border:1px solid #d1d5db; border-radius:4px; outline:none;" />
+                    <button id="btn-book-search" class="helper-btn" style="width:auto; margin:0; padding:4px 10px; background:#3b82f6; color:white; border-color:#2563eb; font-size:12px;">搜索</button>
                 </div>
-            </section>
+                <div id="book-search-status" style="font-size:11px; color:#999; margin-top:4px; display:none;"></div>
+                <ul id="book-search-results" style="list-style:none; padding:0; margin:6px 0 0 0; font-size:12px; max-height:200px; overflow-y:auto;">
+                    <li style="color: #999; padding: 6px 0;">输入关键词搜索棋书...</li>
+                </ul>
+            </div>
         </div>
-        <div id="weiqi-helper-resizer" title="拖拽调整尺寸"></div>
     `;
     document.body.appendChild(panel);
-    applyPanelState(panel, panelState);
-    applySectionState(panel, sectionState);
 
-    const header = panel.querySelector('#weiqi-helper-header');
-    const resizer = panel.querySelector('#weiqi-helper-resizer');
-    const closeBtn = panel.querySelector('.close-btn');
-    const minimizeBtn = panel.querySelector('#btn-minimize-panel');
-    let isDragging = false;
-    let isResizing = false;
-    let offsetX, offsetY;
-    let startWidth, startHeight, startX, startY;
-
-    function persistCurrentPanelState(patch = {}) {
-        const nextState = { ...getPanelStateFromDom(panel), ...patch };
-        return applyPanelState(panel, nextState);
-    }
-
-    function toggleSection(key) {
-        const current = loadSectionState();
-        const willBeOpen = !current[key];
-        
-        if (willBeOpen) {
-            ['settings', 'error', 'search'].forEach(k => current[k] = false);
-        }
-        
-        current[key] = willBeOpen;
-        applySectionState(panel, current);
-    }
-
-    function updateModeDecorations() {
-        const modeLabels = { browse: '浏览模式', practice: '做题模式', book: '棋书练习' };
-        const badge = panel.querySelector('#header-mode-badge');
-        if (badge) badge.textContent = modeLabels[helperMode] || helperMode;
-        const settingsHint = panel.querySelector('#settings-section-hint');
-        if (settingsHint) settingsHint.textContent = `${modeLabels[helperMode] || helperMode} · ${practiceTimeLimitSec}s`;
-    }
-
-    panel.querySelectorAll('.toolbar-preset-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const preset = PANEL_PRESETS[btn.dataset.preset];
-            if (!preset) return;
-            const current = getPanelStateFromDom(panel);
-            persistCurrentPanelState({
-                width: preset.width,
-                height: preset.height,
-                minimized: false,
-                preset: btn.dataset.preset,
-                left: clamp(current.left, 8, Math.max(8, window.innerWidth - preset.width - 8)),
-                top: clamp(current.top, 8, Math.max(8, window.innerHeight - preset.height - 8)),
-            });
-        });
-    });
-
-    minimizeBtn.addEventListener('click', () => {
-        const current = getPanelStateFromDom(panel);
-        persistCurrentPanelState({ minimized: !current.minimized });
-    });
-
-    header.addEventListener('mousedown', (e) => {
-        if (e.target.closest('.panel-toolbar')) return;
-        isDragging = true;
-        offsetX = e.clientX - panel.getBoundingClientRect().left;
-        offsetY = e.clientY - panel.getBoundingClientRect().top;
-        panel.style.transition = 'none';
-    });
-
-    resizer.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        isResizing = true;
-        const rect = panel.getBoundingClientRect();
-        startWidth = rect.width;
-        startHeight = rect.height;
-        startX = e.clientX;
-        startY = e.clientY;
-        panel.style.transition = 'none';
-    });
-
-    document.addEventListener('mousemove', (e) => {
-        if (isDragging) {
-            const rect = panel.getBoundingClientRect();
-            const newX = clamp(e.clientX - offsetX, 8, Math.max(8, window.innerWidth - rect.width - 8));
-            const newY = clamp(e.clientY - offsetY, 8, Math.max(8, window.innerHeight - rect.height - 8));
-            panel.style.left = `${newX}px`;
-            panel.style.top = `${newY}px`;
-            panel.style.right = 'auto';
-            panel.style.bottom = 'auto';
-        } else if (isResizing) {
-            const current = getPanelStateFromDom(panel);
-            const nextWidth = clamp(startWidth + (e.clientX - startX), 280, Math.max(280, window.innerWidth - current.left - 8));
-            const nextHeight = clamp(startHeight + (e.clientY - startY), 240, Math.max(240, window.innerHeight - current.top - 8));
-            panel.style.width = `${nextWidth}px`;
-            panel.style.height = `${nextHeight}px`;
-            panel.dataset.preset = '';
-            panel.querySelectorAll('.toolbar-preset-btn').forEach(btn => btn.classList.remove('active'));
-        }
-    });
-
-    document.addEventListener('mouseup', () => {
-        if (isDragging || isResizing) {
-            persistCurrentPanelState();
-        }
-        isDragging = false;
-        isResizing = false;
-        panel.style.transition = '';
-    });
-
-    window.addEventListener('resize', () => {
-        applyPanelState(panel, getPanelStateFromDom(panel));
-    });
-
-    closeBtn.addEventListener('click', () => {
+    // 绑定关闭按钮
+    panel.querySelector('.close-btn').addEventListener('click', () => {
         panel.style.display = 'none';
     });
-
-    panel.querySelector('#btn-quick-settings').addEventListener('click', () => toggleSection('settings'));
-    panel.querySelector('#btn-quick-errors').addEventListener('click', () => {
-        toggleSection('error');
-        if (loadSectionState().error) renderErrorBook(currentErrorFilter);
-    });
-    panel.querySelector('#btn-quick-search').addEventListener('click', () => toggleSection('search'));
-    panel.querySelector('#btn-toggle-settings-section').addEventListener('click', () => toggleSection('settings'));
+    
+    // 绑定查看错题本按钮
     panel.querySelector('#btn-show-errors').addEventListener('click', () => {
-        toggleSection('error');
-        if (loadSectionState().error) renderErrorBook(currentErrorFilter);
-    });
-    panel.querySelector('#btn-toggle-search-section').addEventListener('click', () => toggleSection('search'));
-
-    panel.querySelector('#btn-clear-errors').addEventListener('click', () => {
-        if (confirm('确定要清空所有错题记录吗？')) {
-            clearErrorBook().then(() => renderErrorBook(currentErrorFilter));
+        const area = document.getElementById('error-book-area');
+        if (area.style.display === 'none') {
+            area.style.display = 'block';
+            renderErrorBook();
+        } else {
+            area.style.display = 'none';
         }
     });
-
-    const errorFilterReviewBtn = panel.querySelector('#btn-error-filter-review');
-    const errorFilterAllBtn = panel.querySelector('#btn-error-filter-all');
-    const errorFilterResolvedBtn = panel.querySelector('#btn-error-filter-resolved');
-
-    function setErrorFilter(filter) {
-        currentErrorFilter = filter;
-        [errorFilterReviewBtn, errorFilterAllBtn, errorFilterResolvedBtn].forEach(btn => {
-            btn.classList.remove('active');
-        });
-        if (filter === 'needReview') errorFilterReviewBtn.classList.add('active');
-        if (filter === 'all') errorFilterAllBtn.classList.add('active');
-        if (filter === 'resolved') errorFilterResolvedBtn.classList.add('active');
-        renderErrorBook(filter);
-    }
-
-    errorFilterReviewBtn.addEventListener('click', () => setErrorFilter('needReview'));
-    errorFilterAllBtn.addEventListener('click', () => setErrorFilter('all'));
-    errorFilterResolvedBtn.addEventListener('click', () => setErrorFilter('resolved'));
+    
+    // 绑定清空错题本按钮
+    panel.querySelector('#btn-clear-errors').addEventListener('click', () => {
+        if (confirm('确定要清空所有错题记录吗？')) {
+            clearErrorBook().then(() => renderErrorBook());
+        }
+    });
 
     // 棋书搜索绑定
     let _bookListCache = null;
@@ -571,7 +250,6 @@ function createPanel() {
     const limitInput = panel.querySelector('#helper-time-limit');
     modeSelect.value = helperMode;
     limitInput.value = String(practiceTimeLimitSec);
-    updateModeDecorations();
 
     modeSelect.addEventListener('change', () => {
         const val = modeSelect.value;
@@ -586,19 +264,6 @@ function createPanel() {
         }
         if (helperMode === 'book' && isOnBookQuestionPage()) {
             initBookPractice();
-        }
-        updateModeDecorations();
-        // 切换模式时自动调整分区展开状态（只在用户主动切换时触发一次）
-        {
-            const sects = loadSectionState();
-            if (helperMode === 'book') {
-                // 棋书模式：展开搜索（找书），收起错题本（减少拥挤）
-                applySectionState(panel, { ...sects, search: true, error: false });
-            } else if (helperMode === 'practice') {
-                // 做题模式：收起搜索（做题时用不到），保留其他
-                applySectionState(panel, { ...sects, search: false });
-            }
-            // browse 模式不自动调整，保持用户上一次的状态
         }
         updateUI(currentDisplayResult);
     });
@@ -618,7 +283,6 @@ function createPanel() {
                 state.deadlineAt = now + practiceTimeLimitSec * 1000;
             }
         }
-        updateModeDecorations();
         updateUI(currentDisplayResult);
     });
 
@@ -639,177 +303,6 @@ function getCurrentPracticeStatsText() {
 // ==========================================
 const DB_NAME = '101WeiqiHelperDB';
 const STORE_NAME = 'error_book';
-const TRUSTED_101_HOSTS = new Set([
-    'www.101weiqi.com',
-    '101weiqi.com',
-    'www.101weiqi.cn',
-    '101weiqi.cn',
-]);
-
-// 根据当前域名返回正确的 101 基础 URL（同时兼容 .cn 和 .com）
-function get101BaseUrl() {
-    const host = window.location.hostname;
-    return host.endsWith('.com') ? 'https://www.101weiqi.com' : 'https://www.101weiqi.cn';
-}
-
-function getDifficultyRank(levelname) {
-    if (!levelname) return 9999;
-    const text = String(levelname).toUpperCase().trim();
-
-    const kMatch = text.match(/^(\d+)\s*K\+?$/);
-    if (kMatch) return 1000 + parseInt(kMatch[1], 10);
-
-    const dMatch = text.match(/^(\d+)\s*D\+?$/);
-    if (dMatch) return 500 - parseInt(dMatch[1], 10);
-
-    return 9999;
-}
-
-function groupErrorsByDifficulty(errors) {
-    const groups = {};
-    errors.forEach((item) => {
-        const key = item.levelname || '未标注难度';
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(item);
-    });
-
-    return Object.entries(groups)
-        .sort((a, b) => getDifficultyRank(a[0]) - getDifficultyRank(b[0]))
-        .map(([level, items]) => ({
-            level,
-            items: items.sort((x, y) => (y.timestamp || 0) - (x.timestamp || 0)),
-        }));
-}
-
-function filterErrorBookRecords(records, filter = 'needReview') {
-    const allRecords = Array.isArray(records) ? records : [];
-    if (filter === 'all') return allRecords;
-    if (filter === 'resolved') return allRecords.filter(item => item.needReview === false);
-    if (filter === 'needReview') return allRecords.filter(item => item.needReview !== false);
-    return allRecords;
-}
-
-function getTrusted101Url(url) {
-    try {
-        const parsed = new URL(url, window.location.href);
-        if (parsed.protocol !== 'https:') return null;
-        if (!TRUSTED_101_HOSTS.has(parsed.hostname)) return null;
-        return parsed.toString();
-    } catch (e) {
-        return null;
-    }
-}
-
-function createElement(tagName, className, text) {
-    const element = document.createElement(tagName);
-    if (className) element.className = className;
-    if (typeof text !== 'undefined') element.textContent = String(text);
-    return element;
-}
-
-function createErrorBookEmptyItem(text) {
-    const li = createElement('li', 'error-book-empty', text);
-    return li;
-}
-
-function renderErrorBookSummary(summaryEl, allErrors) {
-    if (!summaryEl) return;
-
-    const reviewing = allErrors.filter(item => item.needReview !== false).length;
-    const resolved = allErrors.filter(item => item.needReview === false).length;
-    const cards = [
-        { label: '待复习', value: reviewing },
-        { label: '错题总数', value: allErrors.length },
-        { label: '已刷回', value: resolved },
-    ];
-
-    summaryEl.replaceChildren(...cards.map(card => {
-        const wrapper = createElement('div', 'error-book-summary-card');
-        wrapper.append(
-            createElement('div', 'error-book-summary-number', card.value),
-            createElement('div', 'error-book-summary-label', card.label)
-        );
-        return wrapper;
-    }));
-
-    const quickBadge = document.getElementById('quick-errors-badge');
-    if (quickBadge) quickBadge.textContent = String(reviewing);
-    const errorHint = document.getElementById('error-section-hint');
-    if (errorHint) errorHint.textContent = `待复习 ${reviewing}`;
-}
-
-function createErrorBookCard(err) {
-    const safeUrl = getTrusted101Url(err.url);
-    const dateText = new Date(err.timestamp).toLocaleString('zh-CN', {
-        month: 'numeric',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-    });
-    const statusText = err.needReview === false ? '已刷回' : '待复习';
-    const statusClass = err.needReview === false ? 'resolved' : 'reviewing';
-
-    const card = createElement('div', 'error-card');
-    const main = createElement('div', 'error-card-main');
-    const titleRow = createElement('div', 'error-card-title-row');
-    const titleLink = createElement('a', 'error-card-title', `Q-${err.qid}`);
-    const badge = createElement('span', `error-card-badge ${statusClass}`, statusText);
-    const meta = createElement('div', 'error-card-meta');
-    const stats = createElement('div', 'error-card-stats');
-    const actions = createElement('div', 'error-card-actions');
-    const reviewBtn = createElement('button', 'helper-btn error-review-btn', '去重刷');
-
-    if (safeUrl) {
-        titleLink.href = safeUrl;
-        titleLink.target = '_blank';
-        titleLink.rel = 'noopener noreferrer';
-        reviewBtn.addEventListener('click', () => startErrorReview(err.qid, safeUrl));
-    } else {
-        titleLink.href = '#';
-        titleLink.addEventListener('click', (event) => event.preventDefault());
-        titleLink.title = '链接无效';
-        reviewBtn.disabled = true;
-        reviewBtn.title = '错题链接无效，无法跳转';
-    }
-
-    meta.append(
-        createElement('span', '', err.levelname || '未知难度'),
-        createElement('span', '', err.qtypename || '未知题型')
-    );
-
-    stats.append(
-        createElement('span', 'ok', `对 ${err.correctCount || 0}`),
-        createElement('span', 'bad', `错 ${err.errorCount || 0}`),
-        createElement('span', 'time', dateText)
-    );
-
-    titleRow.append(titleLink, badge);
-    main.append(titleRow, meta, stats);
-    actions.appendChild(reviewBtn);
-    card.append(main, actions);
-    return card;
-}
-
-function createErrorBookGroup(group) {
-    const li = createElement('li', 'error-group');
-    const details = createElement('details', 'error-group-details');
-    details.open = true;
-
-    const summary = createElement('summary', 'error-group-header');
-    summary.append(
-        createElement('span', 'error-group-title', group.level),
-        createElement('span', 'error-group-count', `${group.items.length} 题`)
-    );
-
-    const list = createElement('div', 'error-group-list');
-    group.items.forEach(err => {
-        list.appendChild(createErrorBookCard(err));
-    });
-
-    details.append(summary, list);
-    li.appendChild(details);
-    return li;
-}
 
 function initDB() {
     return new Promise((resolve, reject) => {
@@ -827,66 +320,47 @@ function initDB() {
     });
 }
 
-async function saveProblemHistory(problemData, isCorrect = false, options = {}) {
+async function saveProblemHistory(problemData, isCorrect = false) {
     if (!problemData || !problemData.publicid) return;
-
-    const mode = options.mode || helperMode || 'browse';
-    const qid = problemData.publicid;
-
+    
     try {
-        const existing = await getProblemHistory(qid);
-
-        const now = Date.now();
-        const record = existing || {
-            qid: qid,
-            title: problemData.title || '',
-            desc: problemData.desc || '',
-            levelname: problemData.levelname || '',
-            qtypename: problemData.qtypename || '',
-            errorCount: 0,
-            correctCount: 0,
-            timestamp: now,
-            url: window.location.href,
-            needReview: false,
-            lastResult: null,
-            lastMode: mode,
-            lastReviewAt: null,
-        };
-
-        record.title = problemData.title || record.title || '';
-        record.desc = problemData.desc || record.desc || '';
-        record.levelname = problemData.levelname || record.levelname || '';
-        record.qtypename = problemData.qtypename || record.qtypename || '';
-        record.url = window.location.href;
-        record.timestamp = now;
-        record.lastMode = mode;
-
-        if (isCorrect) {
-            record.correctCount = (record.correctCount || 0) + 1;
-            record.lastResult = 'correct';
-
-            if (mode === 'practice' && (record.errorCount || 0) > 0) {
-                record.needReview = false;
-                record.lastReviewAt = now;
-            }
-        } else {
-            record.errorCount = (record.errorCount || 0) + 1;
-            record.lastResult = 'wrong';
-            record.needReview = true;
-            record.lastReviewAt = now;
-        }
-
         const db = await initDB();
-        await new Promise((resolve, reject) => {
-            const tx = db.transaction(STORE_NAME, 'readwrite');
-            const store = tx.objectStore(STORE_NAME);
-            const request = store.put(record);
-            request.onsuccess = () => resolve();
-            request.onerror = () => reject(request.error);
-            tx.onerror = () => reject(tx.error);
-            tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
-        });
-        console.log(`【历史记录】更新 Q-${qid}，对:${record.correctCount || 0} 错:${record.errorCount || 0} 待复习:${record.needReview !== false}`);
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        
+        const qid = problemData.publicid;
+        
+        // 先查询是否已存在
+        const getReq = store.get(qid);
+        getReq.onsuccess = () => {
+            let record = getReq.result;
+            if (record) {
+                // 更新次数和时间
+                if (isCorrect) {
+                    record.correctCount = (record.correctCount || 0) + 1;
+                } else {
+                    record.errorCount = (record.errorCount || 0) + 1;
+                }
+                record.timestamp = Date.now();
+                store.put(record);
+                console.log(`【历史记录】更新 Q-${qid}，对:${record.correctCount || 0} 错:${record.errorCount || 0}`);
+            } else {
+                // 新增记录
+                record = {
+                    qid: qid,
+                    title: problemData.title || '',
+                    desc: problemData.desc || '',
+                    levelname: problemData.levelname || '',
+                    qtypename: problemData.qtypename || '',
+                    errorCount: isCorrect ? 0 : 1,
+                    correctCount: isCorrect ? 1 : 0,
+                    timestamp: Date.now(),
+                    url: window.location.href
+                };
+                store.add(record);
+                console.log(`【历史记录】新增 Q-${qid}，对:${record.correctCount} 错:${record.errorCount}`);
+            }
+        };
     } catch (e) {
         console.error("保存历史记录失败:", e);
     }
@@ -916,6 +390,7 @@ async function getErrorBook() {
             const store = tx.objectStore(STORE_NAME);
             const request = store.getAll();
             request.onsuccess = () => {
+                // 过滤出真正有错题记录的，并按时间倒序排列
                 const results = (request.result || []).filter(r => r.errorCount > 0);
                 results.sort((a, b) => b.timestamp - a.timestamp);
                 resolve(results);
@@ -943,45 +418,38 @@ async function clearErrorBook() {
     }
 }
 
-function startErrorReview(qid, url) {
-    const safeUrl = getTrusted101Url(url);
-    if (!safeUrl) {
-        console.warn('[101围棋助手] 拒绝跳转到不受信任的地址:', url);
-        return;
-    }
-
-    helperMode = 'practice';
-    localStorage.setItem(MODE_KEY, 'practice');
-    const modeSelect = document.getElementById('helper-mode');
-    if (modeSelect) modeSelect.value = 'practice';
-    console.log(`【错题重刷】开始重刷 Q-${qid}`);
-    window.location.href = safeUrl;
-}
-
-async function renderErrorBook(filter = 'needReview') {
+async function renderErrorBook() {
     const listEl = document.getElementById('error-list');
-    const summaryEl = document.getElementById('error-book-summary');
     if (!listEl) return;
-
-    const renderToken = ++errorBookRenderToken;
-    listEl.replaceChildren(createErrorBookEmptyItem('加载中...'));
-
-    const allErrors = await getErrorBook();
-    if (renderToken !== errorBookRenderToken) return;
-
-    const errors = filterErrorBookRecords(allErrors, filter);
-    const grouped = groupErrorsByDifficulty(errors);
-
-    renderErrorBookSummary(summaryEl, allErrors);
-
+    
+    listEl.innerHTML = '<li style="color: #666;">加载中...</li>';
+    
+    const errors = await getErrorBook();
+    
     if (errors.length === 0) {
-        if (renderToken !== errorBookRenderToken) return;
-        listEl.replaceChildren(createErrorBookEmptyItem('当前筛选下没有题目，继续保持。'));
+        listEl.innerHTML = '<li style="color: #666; padding: 5px 0;">暂无错题记录，继续加油！</li>';
         return;
     }
-
-    if (renderToken !== errorBookRenderToken) return;
-    listEl.replaceChildren(...grouped.map(group => createErrorBookGroup(group)));
+    
+    listEl.innerHTML = '';
+    errors.forEach(err => {
+        const date = new Date(err.timestamp).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const li = document.createElement('li');
+        li.style.cssText = 'padding: 5px 0; border-bottom: 1px dashed #eee; display: flex; justify-content: space-between; align-items: center;';
+        
+        li.innerHTML = `
+            <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                <a href="${err.url}" target="_blank" style="color: #2563eb; text-decoration: none; font-weight: bold;">Q-${err.qid}</a>
+                <span style="color: #666; margin-left: 5px;">${err.levelname} ${err.qtypename}</span>
+            </div>
+            <div style="text-align: right; color: #999; min-width: 80px;">
+                <span style="color: #059669; font-size: 11px; margin-right: 3px;">对${err.correctCount || 0}</span>
+                <span style="color: #dc2626; font-weight: bold; margin-right: 5px;">错${err.errorCount}次</span>
+                ${date}
+            </div>
+        `;
+        listEl.appendChild(li);
+    });
 }
 
 
@@ -1097,7 +565,7 @@ async function fetchChapterFullQs(bookId, chapterId) {
     let allQs = [];
     try {
         // 先抓第1页获取 maxpage
-        const url1 = `${get101BaseUrl()}/book/${bookId}/${chapterId}/?page=1`;
+        const url1 = `https://www.101weiqi.cn/book/${bookId}/${chapterId}/?page=1`;
         const html1 = await fetch(url1).then(r => r.text());
         const nd1 = extractNodedata(html1);
         if (!nd1) return [];
@@ -1108,7 +576,7 @@ async function fetchChapterFullQs(bookId, chapterId) {
         if (maxpage > 1) {
             const promises = [];
             for (let p = 2; p <= maxpage; p++) {
-                const urlP = `${get101BaseUrl()}/book/${bookId}/${chapterId}/?page=${p}`;
+                const urlP = `https://www.101weiqi.cn/book/${bookId}/${chapterId}/?page=${p}`;
                 promises.push(fetch(urlP).then(r => r.text()).then(extractNodedata));
             }
             const pages = await Promise.all(promises);
@@ -1216,7 +684,7 @@ function getPrevBookQid() {
  */
 function goToBookQuestion(qid) {
     if (!bookContext) return;
-    window.location.href = `${get101BaseUrl()}/book/${bookContext.bookId}/${bookContext.chapterId}/${qid}/`;
+    window.location.href = `https://www.101weiqi.cn/book/${bookContext.bookId}/${bookContext.chapterId}/${qid}/`;
 }
 
 /**
@@ -1256,7 +724,7 @@ async function initBookPractice() {
 
     // 显示棋书练习区
     const area = document.getElementById('book-practice-area');
-    if (area) area.style.display = 'flex';
+    if (area) area.style.display = 'block';
 
     // 如果已有 inject.js 传来的当前页 qs 作为初始数据
     if (bookContext.qs && bookContext.qs.length > 0 && bookChapterQs.length === 0) {
@@ -1307,7 +775,7 @@ async function fetchBookList() {
 
     // 从服务器获取
     try {
-        const resp = await fetch(`${get101BaseUrl()}/book/list/`);
+        const resp = await fetch('https://www.101weiqi.cn/book/list/');
         const html = await resp.text();
         const match = html.match(/var\s+g_books\s*=\s*(\[[\s\S]*?\]);/);
         if (!match) {
@@ -1362,7 +830,7 @@ function renderBookSearchResults(results, keyword) {
         const descSnippet = b.shortdesc ? b.shortdesc.substring(0, 30) : '';
         li.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center;">
-                <a href="${get101BaseUrl()}/book/${b.id}/" target="_blank"
+                <a href="https://www.101weiqi.cn/book/${b.id}/" target="_blank"
                    style="color:#2563eb; text-decoration:none; font-weight:bold; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                     ${b.name}
                 </a>
@@ -1410,7 +878,7 @@ async function lockPracticeResult(qid, result, reason) {
     }
 
     if (!state.recordedHistory && state.data) {
-        await saveProblemHistory(state.data, result === 1, { mode: helperMode });
+        await saveProblemHistory(state.data, result === 1);
         state.recordedHistory = true;
         currentProblemHistory = await getProblemHistory(qid);
     }
@@ -1435,9 +903,9 @@ async function checkPracticeTimeoutForCurrent() {
     }
 }
 
-window.addEventListener("message", async function(event) {
+// 监听来自 inject.js 的消息
+window.addEventListener("message", function(event) {
     if (event.source != window) return;
-    if (!event.data || event.data.type !== "101_GAME_DATA") return;
 
     currentProblemData = event.data.data;
     const answerResult = event.data.answerResult;
@@ -1517,60 +985,109 @@ if (!practiceTimerHandle) {
 }
 
 // ==========================================
-// 4. UI 更新函数
+// 4. SGF 转换工具 & 坐标翻译
 // ==========================================
-function updateUI(answerResult) {
+function coordinateToHuman(coord) {
+    if (!coord || coord.length !== 2) return coord;
+    // 'a'=97. 围棋盘左上是aa=A19
+    const colCode = coord.charCodeAt(0) - 97; 
+    const rowCode = coord.charCodeAt(1) - 97;
+
+    const colChars = "ABCDEFGHJKLMNOPQRST"; // 19路跳过I
+    const colStr = colChars[colCode] || "?";
+    
+    // 假设是19路盘，行也是倒序
+    const rowStr = (19 - rowCode).toString();
+
+    return `${colStr}${rowStr}`;
+}
+
+// 简单的多分支 SGF 生成器
+function generateSGF(data) {
+    // 这里如果拿到的是 pure SGF 字符串，直接返回
+    if (typeof data.sgf === 'string') return data.sgf;
+
+    // 如果拿到的是 answers 对象，我们就构造一个 SGF
+    if (data.answers && data.answers.ok && data.answers.ok.length > 0) {
+        let content = "(;GM[1]SZ[19]AP[101Helper:1.0]\n";
+        
+        // 遍历所有正解分支
+        data.answers.ok.forEach((variant, idx) => {
+            // SGF 分支开始
+            content += "(\n";
+            content += `C[正解分支 #${idx+1} (用户: ${variant.username})]\n`;
+            
+            // 默认第一手是被动方(黑)或者主动方(白)? 每日一题好像都是黑先
+            // 我们简单轮流 B/W
+            let turn = "B"; 
+            
+            variant.pts.forEach(pt => {
+                 content += `;${turn}[${pt.p}]`;
+                 if(pt.c) content += `C[${pt.c}]`;
+                 turn = (turn === "B") ? "W" : "B";
+            });
+            
+            content += ")\n";
+        });
+        
+        content += ")";
+        return content;
+    }
+    
+    // 如果是做题模式，没有 answers.ok，或者 ok 是空的
+    // 我们尝试返回从页面提取的初始盘面 SGF
+    if (data._extractedInitialSGF) {
+        return data._extractedInitialSGF;
+    }
+    
+    // 如果连初始盘面都没找到，至少返回一个空的 SGF 框架
+    return "(;GM[1]SZ[19]AP[101Helper:1.0]\n)";
+}
+
+function updateUI() {
     const statusDiv = document.getElementById('helper-status');
     if (!statusDiv || !currentProblemData) return;
 
     const modeLabels = { browse: '👀 浏览模式', practice: '📝 做题模式', book: '📘 棋书练习' };
+    let statusHtml = `<span class="status-tag tag-success">数据捕获成功</span>`;
+    statusHtml += `<div style="margin-top:4px; font-size:12px; color:#374151;">当前模式：${modeLabels[helperMode] || helperMode}</div>`;
+
+    if (currentProblemData.publicid) {
+        statusHtml += `<div style="margin-top:4px; font-size:12px; color:#666;">题目 Q-${currentProblemData.publicid} | ${currentProblemData.levelname || ''} | ${currentProblemData.qtypename || ''}</div>`;
+    }
+
+    // null/undefined 统一视为 0（尚未作答）
     const finalResult = (answerResult === null || answerResult === undefined) ? 0 : answerResult;
-    const toneClass = finalResult === 1 ? 'is-success' : finalResult === 2 ? 'is-fail' : 'is-pending';
-    const resultText = finalResult === 1 ? '✅ 本题已通过' : finalResult === 2 ? '❌ 本题未通过' : '⏳ 尚未作答';
-    const historyText = currentProblemHistory
-        ? `${currentProblemHistory.correctCount || 0} 对 / ${currentProblemHistory.errorCount || 0} 错`
-        : '初次挑战';
 
-    statusDiv.className = `helper-info-block status-card ${toneClass}`;
-
-    let statusHtml = `
-        <div class="status-card-head">
-            <span class="status-tag tag-success">数据捕获成功</span>
-            <span class="status-mode-pill">${modeLabels[helperMode] || helperMode}</span>
-        </div>
-        <div class="status-card-main">${resultText}</div>
-        <div class="status-card-meta-row">
-            <span class="status-meta-pill">题目 Q-${currentProblemData.publicid || '?'}</span>
-            <span class="status-meta-pill">${currentProblemData.levelname || '未知难度'}</span>
-            <span class="status-meta-pill">${currentProblemData.qtypename || '未知题型'}</span>
-        </div>
-    `;
+    if (finalResult === 1) {
+        statusHtml += `<div style="margin-top:4px; font-weight:bold; color:#059669;">✅ 本题已通过</div>`;
+    } else if (finalResult === 2) {
+        statusHtml += `<div style="margin-top:4px; font-weight:bold; color:#dc2626;">❌ 本题未通过</div>`;
+    } else {
+        statusHtml += `<div style="margin-top:4px; font-weight:bold; color:#d97706;">⏳ 尚未作答</div>`;
+    }
 
     if (helperMode === 'practice' || helperMode === 'book') {
         const countdown = (currentCountdownSec === null) ? '--:--' : formatCountdown(currentCountdownSec);
-        const countdownClass = (currentCountdownSec !== null && currentCountdownSec <= 10) ? 'is-warning' : '';
-        statusHtml += `
-            <div class="status-card-timer-row ${countdownClass}">
-                <span>⏱️ 本题限时 ${practiceTimeLimitSec}s</span>
-                <strong>剩余 ${countdown}</strong>
-            </div>
-        `;
+        statusHtml += `<div style="margin-top:6px; font-size:12px; color:#111827;">⏱️ 本题限时：${practiceTimeLimitSec}s | 剩余：${countdown}</div>`;
     }
 
-    statusHtml += `<div class="status-card-history">📚 历史战绩：${historyText}</div>`;
+    // 渲染历史战绩
+    if (currentProblemHistory) {
+        const correct = currentProblemHistory.correctCount || 0;
+        const error = currentProblemHistory.errorCount || 0;
+        statusHtml += `<div style="margin-top:8px; font-size:12px; color:#4b5563; text-align:center; background:#f3f4f6; padding:4px; border-radius:4px;">📊 历史战绩：${correct}对 ${error}错</div>`;
+    } else {
+        statusHtml += `<div style="margin-top:8px; font-size:12px; color:#4b5563; text-align:center; background:#f3f4f6; padding:4px; border-radius:4px;">📊 历史战绩：初次挑战</div>`;
+    }
 
     statusDiv.innerHTML = statusHtml;
-
-    const headerBadge = document.getElementById('header-mode-badge');
-    if (headerBadge) headerBadge.textContent = modeLabels[helperMode] || helperMode;
-    const settingsHint = document.getElementById('settings-section-hint');
-    if (settingsHint) settingsHint.textContent = `${modeLabels[helperMode] || helperMode} · ${practiceTimeLimitSec}s`;
 
     // 棋书练习区渲染
     const bookArea = document.getElementById('book-practice-area');
     if (bookArea) {
         if (helperMode === 'book' && isOnBookQuestionPage()) {
-            bookArea.style.display = 'flex';
+            bookArea.style.display = 'block';
             const infoEl = document.getElementById('book-info');
             const statsEl = document.getElementById('book-stats');
             const progressFill = document.getElementById('book-progress-fill');
@@ -1594,8 +1111,7 @@ function updateUI(answerResult) {
     const statsDiv = document.getElementById('practice-stats');
     if (statsDiv) {
         if (helperMode === 'practice') {
-            statsDiv.style.display = 'flex';
-            statsDiv.className = 'helper-info-block practice-stats-card';
+            statsDiv.style.display = 'block';
             statsDiv.innerHTML = getCurrentPracticeStatsText();
         } else {
             statsDiv.style.display = 'none';

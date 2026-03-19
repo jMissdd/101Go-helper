@@ -15,6 +15,8 @@ const PANEL_PRESETS = {
     medium: { width: 360, height: 560 },
     large: { width: 440, height: 720 },
 };
+const PANEL_MIN_WIDTH = 280;
+const PANEL_MIN_HEIGHT = 240;
 
 let helperMode = localStorage.getItem(MODE_KEY) || 'browse'; // browse | practice | book
 let practiceTimeLimitSec = parseInt(localStorage.getItem(LIMIT_KEY) || '60', 10);
@@ -102,8 +104,8 @@ function savePanelState(state) {
 
 function normalizePanelState(state) {
     const fallback = getDefaultPanelState();
-    const width = clamp(Number(state.width) || fallback.width, 280, Math.max(280, window.innerWidth - 24));
-    const height = clamp(Number(state.height) || fallback.height, 240, Math.max(240, window.innerHeight - 24));
+    const width = clamp(Number(state.width) || fallback.width, PANEL_MIN_WIDTH, Math.max(PANEL_MIN_WIDTH, window.innerWidth - 24));
+    const height = clamp(Number(state.height) || fallback.height, PANEL_MIN_HEIGHT, Math.max(PANEL_MIN_HEIGHT, window.innerHeight - 24));
     const minimized = !!state.minimized;
     const visibleHeight = minimized ? 58 : height;
     const left = clamp(Number(state.left) || fallback.left, 8, Math.max(8, window.innerWidth - width - 8));
@@ -195,6 +197,64 @@ function applySectionState(panel, nextState) {
     return state;
 }
 
+function getModeLabels() {
+    return { browse: '浏览模式', practice: '做题模式', book: '棋书练习' };
+}
+
+function getPreferredSectionForMode() {
+    if (helperMode === 'book' && isOnBookQuestionPage()) return null;
+    if (helperMode === 'book') return 'search';
+    if (helperMode === 'practice') return 'search';
+    return 'search';
+}
+
+function syncPanelWorkspaceForCurrentMode(panel, force = false) {
+    if (!panel) return;
+    const preferred = getPreferredSectionForMode();
+    const area = panel.querySelector('#book-practice-area');
+    panel.dataset.mode = helperMode;
+    if (area) {
+        area.classList.toggle('is-compact', helperMode !== 'book');
+    }
+
+    if (helperMode === 'book' && isOnBookQuestionPage()) {
+        panel.dataset.workspaceMode = 'book:question';
+        applySectionState(panel, { settings: false, error: false, search: false });
+        return;
+    }
+
+    const currentState = loadSectionState();
+    const hasOpenSection = currentState.settings || currentState.error || currentState.search;
+    const nextWorkspaceMode = `${helperMode}:${preferred || 'none'}`;
+    if (force || panel.dataset.workspaceMode !== nextWorkspaceMode || !hasOpenSection || (preferred && !currentState[preferred])) {
+        panel.dataset.workspaceMode = nextWorkspaceMode;
+        const nextState = { settings: false, error: false, search: false };
+        if (preferred) nextState[preferred] = true;
+        applySectionState(panel, nextState);
+    }
+}
+
+function getTrustedSiteOrigin() {
+    const currentHost = window.location.hostname;
+    if (TRUSTED_101_HOSTS.has(currentHost)) {
+        return `https://${currentHost}`;
+    }
+    return 'https://www.101weiqi.cn';
+}
+
+function buildBookUrl(path) {
+    return `${getTrustedSiteOrigin()}${path}`;
+}
+
+function updatePanelSizeInputs(panel) {
+    if (!panel) return;
+    const state = getPanelStateFromDom(panel);
+    const widthInput = panel.querySelector('#helper-panel-width');
+    const heightInput = panel.querySelector('#helper-panel-height');
+    if (widthInput) widthInput.value = String(state.width);
+    if (heightInput) heightInput.value = String(state.height);
+}
+
 // ==========================================
 // 2. 创建 UI 面板 (可拖动)
 // ==========================================
@@ -252,6 +312,17 @@ function createPanel() {
                         <div class="panel-setting-row">
                             <span class="panel-setting-label">限时(秒)</span>
                             <input id="helper-time-limit" type="number" min="5" step="5" class="panel-input panel-input-number" />
+                        </div>
+                        <div class="panel-setting-row panel-setting-row-size">
+                            <span class="panel-setting-label">面板大小</span>
+                            <div class="panel-size-inputs">
+                                <input id="helper-panel-width" type="number" min="280" step="10" class="panel-input panel-size-input" placeholder="宽" />
+                                <input id="helper-panel-height" type="number" min="240" step="10" class="panel-input panel-size-input" placeholder="高" />
+                            </div>
+                        </div>
+                        <div class="panel-inline-actions">
+                            <button id="btn-apply-panel-size" class="helper-btn feature-btn-secondary panel-inline-btn" type="button">应用尺寸</button>
+                            <button id="btn-reset-panel-layout" class="helper-btn feature-btn-secondary panel-inline-btn" type="button">恢复布局</button>
                         </div>
                     </div>
                 </div>
@@ -338,6 +409,10 @@ function createPanel() {
     const resizer = panel.querySelector('#weiqi-helper-resizer');
     const closeBtn = panel.querySelector('.close-btn');
     const minimizeBtn = panel.querySelector('#btn-minimize-panel');
+    const widthInput = panel.querySelector('#helper-panel-width');
+    const heightInput = panel.querySelector('#helper-panel-height');
+    const applySizeBtn = panel.querySelector('#btn-apply-panel-size');
+    const resetLayoutBtn = panel.querySelector('#btn-reset-panel-layout');
     let isDragging = false;
     let isResizing = false;
     let offsetX, offsetY;
@@ -345,23 +420,25 @@ function createPanel() {
 
     function persistCurrentPanelState(patch = {}) {
         const nextState = { ...getPanelStateFromDom(panel), ...patch };
-        return applyPanelState(panel, nextState);
+        const state = applyPanelState(panel, nextState);
+        updatePanelSizeInputs(panel);
+        return state;
     }
 
     function toggleSection(key) {
         const current = loadSectionState();
-        const willBeOpen = !current[key];
-        
-        if (willBeOpen) {
-            ['settings', 'error', 'search'].forEach(k => current[k] = false);
-        }
-        
-        current[key] = willBeOpen;
+        current[key] = !current[key];
         applySectionState(panel, current);
     }
 
+    function focusSection(key) {
+        const nextState = { settings: false, error: false, search: false };
+        if (key) nextState[key] = true;
+        applySectionState(panel, nextState);
+    }
+
     function updateModeDecorations() {
-        const modeLabels = { browse: '浏览模式', practice: '做题模式', book: '棋书练习' };
+        const modeLabels = getModeLabels();
         const badge = panel.querySelector('#header-mode-badge');
         if (badge) badge.textContent = modeLabels[helperMode] || helperMode;
         const settingsHint = panel.querySelector('#settings-section-hint');
@@ -381,6 +458,7 @@ function createPanel() {
                 left: clamp(current.left, 8, Math.max(8, window.innerWidth - preset.width - 8)),
                 top: clamp(current.top, 8, Math.max(8, window.innerHeight - preset.height - 8)),
             });
+            syncPanelWorkspaceForCurrentMode(panel, true);
         });
     });
 
@@ -420,12 +498,13 @@ function createPanel() {
             panel.style.bottom = 'auto';
         } else if (isResizing) {
             const current = getPanelStateFromDom(panel);
-            const nextWidth = clamp(startWidth + (e.clientX - startX), 280, Math.max(280, window.innerWidth - current.left - 8));
-            const nextHeight = clamp(startHeight + (e.clientY - startY), 240, Math.max(240, window.innerHeight - current.top - 8));
+            const nextWidth = clamp(startWidth + (e.clientX - startX), PANEL_MIN_WIDTH, Math.max(PANEL_MIN_WIDTH, window.innerWidth - current.left - 8));
+            const nextHeight = clamp(startHeight + (e.clientY - startY), PANEL_MIN_HEIGHT, Math.max(PANEL_MIN_HEIGHT, window.innerHeight - current.top - 8));
             panel.style.width = `${nextWidth}px`;
             panel.style.height = `${nextHeight}px`;
             panel.dataset.preset = '';
             panel.querySelectorAll('.toolbar-preset-btn').forEach(btn => btn.classList.remove('active'));
+            updatePanelSizeInputs(panel);
         }
     });
 
@@ -440,18 +519,19 @@ function createPanel() {
 
     window.addEventListener('resize', () => {
         applyPanelState(panel, getPanelStateFromDom(panel));
+        updatePanelSizeInputs(panel);
     });
 
     closeBtn.addEventListener('click', () => {
         panel.style.display = 'none';
     });
 
-    panel.querySelector('#btn-quick-settings').addEventListener('click', () => toggleSection('settings'));
+    panel.querySelector('#btn-quick-settings').addEventListener('click', () => focusSection('settings'));
     panel.querySelector('#btn-quick-errors').addEventListener('click', () => {
-        toggleSection('error');
+        focusSection('error');
         if (loadSectionState().error) renderErrorBook(currentErrorFilter);
     });
-    panel.querySelector('#btn-quick-search').addEventListener('click', () => toggleSection('search'));
+    panel.querySelector('#btn-quick-search').addEventListener('click', () => focusSection('search'));
     panel.querySelector('#btn-toggle-settings-section').addEventListener('click', () => toggleSection('settings'));
     panel.querySelector('#btn-show-errors').addEventListener('click', () => {
         toggleSection('error');
@@ -483,6 +563,34 @@ function createPanel() {
     errorFilterReviewBtn.addEventListener('click', () => setErrorFilter('needReview'));
     errorFilterAllBtn.addEventListener('click', () => setErrorFilter('all'));
     errorFilterResolvedBtn.addEventListener('click', () => setErrorFilter('resolved'));
+
+    function applyManualPanelSize() {
+        const current = getPanelStateFromDom(panel);
+        const nextWidth = clamp(parseInt(widthInput.value || String(current.width), 10) || current.width, PANEL_MIN_WIDTH, Math.max(PANEL_MIN_WIDTH, window.innerWidth - 24));
+        const nextHeight = clamp(parseInt(heightInput.value || String(current.height), 10) || current.height, PANEL_MIN_HEIGHT, Math.max(PANEL_MIN_HEIGHT, window.innerHeight - 24));
+        persistCurrentPanelState({
+            width: nextWidth,
+            height: nextHeight,
+            minimized: false,
+            preset: '',
+            left: clamp(current.left, 8, Math.max(8, window.innerWidth - nextWidth - 8)),
+            top: clamp(current.top, 8, Math.max(8, window.innerHeight - nextHeight - 8)),
+        });
+        syncPanelWorkspaceForCurrentMode(panel, true);
+    }
+
+    applySizeBtn.addEventListener('click', applyManualPanelSize);
+    [widthInput, heightInput].forEach(input => {
+        input.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') applyManualPanelSize();
+        });
+    });
+
+    resetLayoutBtn.addEventListener('click', () => {
+        const fallback = getDefaultPanelState();
+        persistCurrentPanelState(fallback);
+        syncPanelWorkspace();
+    });
 
     // 棋书搜索绑定
     let _bookListCache = null;
@@ -572,6 +680,8 @@ function createPanel() {
     modeSelect.value = helperMode;
     limitInput.value = String(practiceTimeLimitSec);
     updateModeDecorations();
+    updatePanelSizeInputs(panel);
+    syncPanelWorkspaceForCurrentMode(panel, true);
 
     modeSelect.addEventListener('change', () => {
         const val = modeSelect.value;
@@ -588,18 +698,7 @@ function createPanel() {
             initBookPractice();
         }
         updateModeDecorations();
-        // 切换模式时自动调整分区展开状态（只在用户主动切换时触发一次）
-        {
-            const sects = loadSectionState();
-            if (helperMode === 'book') {
-                // 棋书模式：展开搜索（找书），收起错题本（减少拥挤）
-                applySectionState(panel, { ...sects, search: true, error: false });
-            } else if (helperMode === 'practice') {
-                // 做题模式：收起搜索（做题时用不到），保留其他
-                applySectionState(panel, { ...sects, search: false });
-            }
-            // browse 模式不自动调整，保持用户上一次的状态
-        }
+        syncPanelWorkspaceForCurrentMode(panel, true);
         updateUI(currentDisplayResult);
     });
 
@@ -645,12 +744,6 @@ const TRUSTED_101_HOSTS = new Set([
     'www.101weiqi.cn',
     '101weiqi.cn',
 ]);
-
-// 根据当前域名返回正确的 101 基础 URL（同时兼容 .cn 和 .com）
-function get101BaseUrl() {
-    const host = window.location.hostname;
-    return host.endsWith('.com') ? 'https://www.101weiqi.com' : 'https://www.101weiqi.cn';
-}
 
 function getDifficultyRank(levelname) {
     if (!levelname) return 9999;
@@ -1097,7 +1190,7 @@ async function fetchChapterFullQs(bookId, chapterId) {
     let allQs = [];
     try {
         // 先抓第1页获取 maxpage
-        const url1 = `${get101BaseUrl()}/book/${bookId}/${chapterId}/?page=1`;
+        const url1 = buildBookUrl(`/book/${bookId}/${chapterId}/?page=1`);
         const html1 = await fetch(url1).then(r => r.text());
         const nd1 = extractNodedata(html1);
         if (!nd1) return [];
@@ -1108,7 +1201,7 @@ async function fetchChapterFullQs(bookId, chapterId) {
         if (maxpage > 1) {
             const promises = [];
             for (let p = 2; p <= maxpage; p++) {
-                const urlP = `${get101BaseUrl()}/book/${bookId}/${chapterId}/?page=${p}`;
+                const urlP = buildBookUrl(`/book/${bookId}/${chapterId}/?page=${p}`);
                 promises.push(fetch(urlP).then(r => r.text()).then(extractNodedata));
             }
             const pages = await Promise.all(promises);
@@ -1216,7 +1309,7 @@ function getPrevBookQid() {
  */
 function goToBookQuestion(qid) {
     if (!bookContext) return;
-    window.location.href = `${get101BaseUrl()}/book/${bookContext.bookId}/${bookContext.chapterId}/${qid}/`;
+    window.location.href = buildBookUrl(`/book/${bookContext.bookId}/${bookContext.chapterId}/${qid}/`);
 }
 
 /**
@@ -1256,7 +1349,7 @@ async function initBookPractice() {
 
     // 显示棋书练习区
     const area = document.getElementById('book-practice-area');
-    if (area) area.style.display = 'flex';
+    if (area) area.style.display = 'block';
 
     // 如果已有 inject.js 传来的当前页 qs 作为初始数据
     if (bookContext.qs && bookContext.qs.length > 0 && bookChapterQs.length === 0) {
@@ -1307,7 +1400,7 @@ async function fetchBookList() {
 
     // 从服务器获取
     try {
-        const resp = await fetch(`${get101BaseUrl()}/book/list/`);
+        const resp = await fetch(buildBookUrl('/book/list/'));
         const html = await resp.text();
         const match = html.match(/var\s+g_books\s*=\s*(\[[\s\S]*?\]);/);
         if (!match) {
@@ -1362,7 +1455,7 @@ function renderBookSearchResults(results, keyword) {
         const descSnippet = b.shortdesc ? b.shortdesc.substring(0, 30) : '';
         li.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center;">
-                <a href="${get101BaseUrl()}/book/${b.id}/" target="_blank"
+                <a href="${buildBookUrl(`/book/${b.id}/`)}" target="_blank"
                    style="color:#2563eb; text-decoration:none; font-weight:bold; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                     ${b.name}
                 </a>
@@ -1565,12 +1658,14 @@ function updateUI(answerResult) {
     if (headerBadge) headerBadge.textContent = modeLabels[helperMode] || helperMode;
     const settingsHint = document.getElementById('settings-section-hint');
     if (settingsHint) settingsHint.textContent = `${modeLabels[helperMode] || helperMode} · ${practiceTimeLimitSec}s`;
+    const panel = document.getElementById('weiqi-helper-panel');
+    if (panel) syncPanelWorkspaceForCurrentMode(panel);
 
     // 棋书练习区渲染
     const bookArea = document.getElementById('book-practice-area');
     if (bookArea) {
         if (helperMode === 'book' && isOnBookQuestionPage()) {
-            bookArea.style.display = 'flex';
+            bookArea.style.display = 'block';
             const infoEl = document.getElementById('book-info');
             const statsEl = document.getElementById('book-stats');
             const progressFill = document.getElementById('book-progress-fill');
@@ -1594,7 +1689,7 @@ function updateUI(answerResult) {
     const statsDiv = document.getElementById('practice-stats');
     if (statsDiv) {
         if (helperMode === 'practice') {
-            statsDiv.style.display = 'flex';
+            statsDiv.style.display = 'block';
             statsDiv.className = 'helper-info-block practice-stats-card';
             statsDiv.innerHTML = getCurrentPracticeStatsText();
         } else {

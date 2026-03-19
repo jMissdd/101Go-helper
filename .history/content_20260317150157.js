@@ -348,16 +348,54 @@ function createPanel() {
         return applyPanelState(panel, nextState);
     }
 
-    function toggleSection(key) {
+    function applySectionState(panel, nextState) {
+        const state = { settings: true, error: false, search: false, ...nextState };
+        ['settings', 'error', 'search'].forEach(key => {
+            const section = panel.querySelector(`[data-section="${key}"]`);
+            if (!section) return;
+            const isVisible = !!state[key];
+            section.classList.toggle('is-collapsed', !isVisible);
+            // 排他机制：如果展开，它的 body 区域获取 flex 填充空间，其余折叠
+            if (isVisible) {
+                section.style.flex = '1 1 auto';
+                section.style.display = 'flex';
+                section.style.flexDirection = 'column';
+                section.style.minHeight = '0'; // 必须，让内部独立滚动起效
+            } else {
+                section.style.flex = 'none';
+                section.style.display = 'block';
+                section.style.minHeight = 'auto';
+            }
+        });
+
+        const mappings = [
+            ['settings', '#btn-quick-settings', '#btn-toggle-settings-section'],
+            ['error', '#btn-quick-errors', '#btn-show-errors'],
+            ['search', '#btn-quick-search', '#btn-toggle-search-section'],
+        ];
+
+        mappings.forEach(([key, quickSelector, sectionSelector]) => {
+            const quickBtn = panel.querySelector(quickSelector);
+            const sectionBtn = panel.querySelector(sectionSelector);
+            [quickBtn, sectionBtn].forEach(btn => {
+                if (!btn) return;
+                btn.classList.toggle('active', !!state[key]);
+                btn.setAttribute('aria-expanded', state[key] ? 'true' : 'false');
+            });
+        });
+
+        saveSectionState(state);
+        return state;
+    }
+
+    function toggleSectionMutualExclusive(key) {
+        // 互斥展开：点开某一个时，关闭其余两个。如果是点击已展开的，则收起（允许全收起）
         const current = loadSectionState();
-        const willBeOpen = !current[key];
-        
-        if (willBeOpen) {
-            ['settings', 'error', 'search'].forEach(k => current[k] = false);
+        const nextState = { settings: false, error: false, search: false };
+        if (!current[key]) {
+            nextState[key] = true; // 仅展开当前点击的此项
         }
-        
-        current[key] = willBeOpen;
-        applySectionState(panel, current);
+        applySectionState(panel, nextState);
     }
 
     function updateModeDecorations() {
@@ -446,18 +484,18 @@ function createPanel() {
         panel.style.display = 'none';
     });
 
-    panel.querySelector('#btn-quick-settings').addEventListener('click', () => toggleSection('settings'));
+    panel.querySelector('#btn-quick-settings').addEventListener('click', () => toggleSectionMutualExclusive('settings'));
     panel.querySelector('#btn-quick-errors').addEventListener('click', () => {
-        toggleSection('error');
+        toggleSectionMutualExclusive('error');
         if (loadSectionState().error) renderErrorBook(currentErrorFilter);
     });
-    panel.querySelector('#btn-quick-search').addEventListener('click', () => toggleSection('search'));
-    panel.querySelector('#btn-toggle-settings-section').addEventListener('click', () => toggleSection('settings'));
+    panel.querySelector('#btn-quick-search').addEventListener('click', () => toggleSectionMutualExclusive('search'));
+    panel.querySelector('#btn-toggle-settings-section').addEventListener('click', () => toggleSectionMutualExclusive('settings'));
     panel.querySelector('#btn-show-errors').addEventListener('click', () => {
-        toggleSection('error');
+        toggleSectionMutualExclusive('error');
         if (loadSectionState().error) renderErrorBook(currentErrorFilter);
     });
-    panel.querySelector('#btn-toggle-search-section').addEventListener('click', () => toggleSection('search'));
+    panel.querySelector('#btn-toggle-search-section').addEventListener('click', () => toggleSectionMutualExclusive('search'));
 
     panel.querySelector('#btn-clear-errors').addEventListener('click', () => {
         if (confirm('确定要清空所有错题记录吗？')) {
@@ -1256,7 +1294,7 @@ async function initBookPractice() {
 
     // 显示棋书练习区
     const area = document.getElementById('book-practice-area');
-    if (area) area.style.display = 'flex';
+    if (area) area.style.display = 'block';
 
     // 如果已有 inject.js 传来的当前页 qs 作为初始数据
     if (bookContext.qs && bookContext.qs.length > 0 && bookChapterQs.length === 0) {
@@ -1570,7 +1608,7 @@ function updateUI(answerResult) {
     const bookArea = document.getElementById('book-practice-area');
     if (bookArea) {
         if (helperMode === 'book' && isOnBookQuestionPage()) {
-            bookArea.style.display = 'flex';
+            bookArea.style.display = 'block';
             const infoEl = document.getElementById('book-info');
             const statsEl = document.getElementById('book-stats');
             const progressFill = document.getElementById('book-progress-fill');
@@ -1594,7 +1632,7 @@ function updateUI(answerResult) {
     const statsDiv = document.getElementById('practice-stats');
     if (statsDiv) {
         if (helperMode === 'practice') {
-            statsDiv.style.display = 'flex';
+            statsDiv.style.display = 'block';
             statsDiv.className = 'helper-info-block practice-stats-card';
             statsDiv.innerHTML = getCurrentPracticeStatsText();
         } else {

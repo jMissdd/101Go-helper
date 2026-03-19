@@ -126,13 +126,9 @@
 
 /* 错题本 */
 .error-book-area {
-    margin-top: 0;
-    padding-top: 0;
-    border-top: none;
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-height: 0;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #e5e7eb;
 }
 
 .error-book-header {
@@ -217,9 +213,8 @@
     list-style: none;
     padding: 0;
     margin: 0;
-    flex: 1 1 auto;
+    max-height: 320px;
     overflow-y: auto;
-    max-height: none;
 }
 
 .error-book-empty {
@@ -537,6 +532,7 @@
 .panel-section-card {
     display: flex;
     flex-direction: column;
+    min-height: 48px; /* Ensure header height is maintained */
 }
 
 .panel-section-card:not(.is-collapsed) {
@@ -544,7 +540,19 @@
 }
 
 .panel-section-header {
-    display: none;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 14px;
+    border: none;
+    background: linear-gradient(180deg, rgba(248, 250, 252, 0.95), rgba(241, 245, 249, 0.92));
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 800;
+    text-align: left;
+    cursor: pointer;
 }
 
 .panel-section-header-warn {
@@ -571,8 +579,8 @@
     overflow: hidden;
 }
 
-.panel-section-card.is-collapsed {
-    display: none !important;
+.panel-section-card.is-collapsed .panel-section-body {
+    display: none;
 }
 
 .panel-settings-grid {
@@ -798,8 +806,6 @@
 .search-section-body {
     display: flex;
     flex-direction: column;
-    flex: 1 1 auto;
-    min-height: 0;
     gap: 8px;
 }
 
@@ -834,9 +840,8 @@
     list-style: none;
     padding: 0;
     margin: 0;
-    flex: 1 1 auto;
+    max-height: 220px;
     overflow-y: auto;
-    max-height: none;
 }
 
 .search-empty {

@@ -544,7 +544,19 @@
 }
 
 .panel-section-header {
-    display: none;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 14px;
+    border: none;
+    background: linear-gradient(180deg, rgba(248, 250, 252, 0.95), rgba(241, 245, 249, 0.92));
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 800;
+    text-align: left;
+    cursor: pointer;
 }
 
 .panel-section-header-warn {
