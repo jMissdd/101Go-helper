@@ -198,17 +198,6 @@ function applySectionState(panel, nextState) {
 // ==========================================
 // 2. 创建 UI 面板 (可拖动)
 // ==========================================
-function updatePanelScale() {
-    const p = document.getElementById('weiqi-helper-panel');
-    if (p) {
-        let baseWinW = 1200;
-        let scale = Math.min(1, window.innerWidth / baseWinW);
-        scale = Math.max(0.65, scale); // 最小缩放保持在一个合理值
-        p.style.zoom = scale;
-    }
-}
-window.addEventListener('resize', updatePanelScale);
-
 function createPanel() {
     const existingPanel = document.getElementById('weiqi-helper-panel');
     if (existingPanel) return existingPanel;
@@ -245,29 +234,6 @@ function createPanel() {
                 <button id="btn-quick-search" class="quick-action-btn" type="button">搜索</button>
             </div>
 
-            <div id="practice-stats" class="helper-info-block practice-stats-card" style="display:none;"></div>
-
-            <div id="book-practice-area" class="panel-feature-card book-feature-card" style="display:none;">
-                <div class="feature-card-title">📘 棋书练习</div>
-                <div id="book-info" class="feature-card-meta"></div>
-                <div id="book-progress-bar" class="book-progress-wrap">
-                    <div class="book-progress-track">
-                        <div id="book-progress-fill" style="background:#8b5cf6; height:100%; width:0%; transition:width 0.3s;"></div>
-                    </div>
-                    <div id="book-progress-text" class="feature-card-meta feature-card-meta-tight"></div>
-                </div>
-                <div id="book-stats" class="feature-card-stats"></div>
-                <div class="feature-card-actions">
-                    <button id="btn-book-prev" class="helper-btn book-nav-btn feature-btn-secondary">⬅ 上一题</button>
-                    <button id="btn-book-next" class="helper-btn book-nav-btn feature-btn-primary">下一题 ➡</button>
-                </div>
-                <div class="feature-card-actions feature-card-actions-tight">
-                    <button id="btn-book-wrong-only" class="helper-btn book-nav-btn feature-btn-secondary">🔴 仅错题</button>
-                    <button id="btn-book-reset" class="helper-btn book-nav-btn feature-btn-danger">🔄 重置本章</button>
-                </div>
-            </div>
-
-            <div class="panel-scroll-area">
             <section id="helper-mode-section" class="panel-section-card" data-section="settings">
                 <button id="btn-toggle-settings-section" class="panel-section-header" type="button">
                     <span>模式与限时</span>
@@ -290,6 +256,8 @@ function createPanel() {
                     </div>
                 </div>
             </section>
+
+            <div id="practice-stats" class="helper-info-block practice-stats-card" style="display:none; margin-top:8px;"></div>
 
             <section id="error-book-section" class="panel-section-card" data-section="error">
                 <button id="btn-show-errors" class="panel-section-header panel-section-header-warn" type="button">
@@ -321,6 +289,26 @@ function createPanel() {
                 </div>
             </section>
 
+            <div id="book-practice-area" class="panel-feature-card book-feature-card" style="display:none;">
+                <div class="feature-card-title">📘 棋书练习</div>
+                <div id="book-info" class="feature-card-meta"></div>
+                <div id="book-progress-bar" class="book-progress-wrap">
+                    <div class="book-progress-track">
+                        <div id="book-progress-fill" style="background:#8b5cf6; height:100%; width:0%; transition:width 0.3s;"></div>
+                    </div>
+                    <div id="book-progress-text" class="feature-card-meta feature-card-meta-tight"></div>
+                </div>
+                <div id="book-stats" class="feature-card-stats"></div>
+                <div class="feature-card-actions">
+                    <button id="btn-book-prev" class="helper-btn book-nav-btn feature-btn-secondary">⬅ 上一题</button>
+                    <button id="btn-book-next" class="helper-btn book-nav-btn feature-btn-primary">下一题 ➡</button>
+                </div>
+                <div class="feature-card-actions feature-card-actions-tight">
+                    <button id="btn-book-wrong-only" class="helper-btn book-nav-btn feature-btn-secondary">🔴 仅错题</button>
+                    <button id="btn-book-reset" class="helper-btn book-nav-btn feature-btn-danger">🔄 重置本章</button>
+                </div>
+            </div>
+
             <section id="book-search-section" class="panel-section-card" data-section="search">
                 <button id="btn-toggle-search-section" class="panel-section-header" type="button">
                     <span>棋书搜索</span>
@@ -339,14 +327,12 @@ function createPanel() {
                     </div>
                 </div>
             </section>
-            </div>
         </div>
         <div id="weiqi-helper-resizer" title="拖拽调整尺寸"></div>
     `;
     document.body.appendChild(panel);
     applyPanelState(panel, panelState);
     applySectionState(panel, sectionState);
-    updatePanelScale();
 
     const header = panel.querySelector('#weiqi-helper-header');
     const resizer = panel.querySelector('#weiqi-helper-resizer');
@@ -1533,28 +1519,6 @@ if (!practiceTimerHandle) {
 // ==========================================
 // 4. UI 更新函数
 // ==========================================
-function updateFloatingTimer(finalResult) {
-    let timerEl = document.getElementById('helper-floating-timer');
-    if (!timerEl) {
-        timerEl = document.createElement('div');
-        timerEl.id = 'helper-floating-timer';
-        timerEl.innerHTML = '<span class="time-label">剩余</span><span id="helper-floating-timer-val" class="time-value">--</span><span class="time-unit">s</span>';
-        document.body.appendChild(timerEl);
-    }
-    if ((helperMode === 'practice' || helperMode === 'book') && currentCountdownSec !== null && finalResult === 0) {
-        timerEl.style.display = 'flex';
-        const valEl = document.getElementById('helper-floating-timer-val');
-        if (valEl) valEl.textContent = Math.max(0, currentCountdownSec);
-        if (currentCountdownSec <= 10) {
-            timerEl.classList.add('warning');
-        } else {
-            timerEl.classList.remove('warning');
-        }
-    } else {
-        timerEl.style.display = 'none';
-    }
-}
-
 function updateUI(answerResult) {
     const statusDiv = document.getElementById('helper-status');
     if (!statusDiv || !currentProblemData) return;
@@ -1644,6 +1608,4 @@ function updateUI(answerResult) {
             statsDiv.innerHTML = '';
         }
     }
-
-    updateFloatingTimer(finalResult);
 }

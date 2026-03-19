@@ -6,10 +6,7 @@
   "web_accessible_resources": [
     {
       "resources": ["inject.js"],
-      "matches": [
-        "*://*.101weiqi.cn/*",
-        "*://*.101weiqi.com/*"
-      ]
+      "matches": ["*://*.101weiqi.cn/*", "*://*.101weiqi.com/*"]
     }
   ],
   "content_scripts": [
@@ -23,5 +20,6 @@
       "css": ["style.css"],
       "js": ["content.js"]
     }
+
   ]
 }

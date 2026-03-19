@@ -472,7 +472,7 @@
     padding: 14px;
     max-height: none;
     height: calc(100% - 58px);
-    overflow-y: visible;
+    overflow-y: auto;
     background:
         radial-gradient(circle at top right, rgba(59, 130, 246, 0.08), transparent 28%),
         linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 0.98));
@@ -537,6 +537,7 @@
 .panel-section-card {
     display: flex;
     flex-direction: column;
+    min-height: 48px; /* Ensure header height is maintained */
 }
 
 .panel-section-card:not(.is-collapsed) {
@@ -544,7 +545,19 @@
 }
 
 .panel-section-header {
-    display: none;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 14px;
+    border: none;
+    background: linear-gradient(180deg, rgba(248, 250, 252, 0.95), rgba(241, 245, 249, 0.92));
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 800;
+    text-align: left;
+    cursor: pointer;
 }
 
 .panel-section-header-warn {
@@ -571,8 +584,8 @@
     overflow: hidden;
 }
 
-.panel-section-card.is-collapsed {
-    display: none !important;
+.panel-section-card.is-collapsed .panel-section-body {
+    display: none;
 }
 
 .panel-settings-grid {
@@ -617,8 +630,8 @@
 .status-card {
     border: none;
     margin-top: 0;
-    padding: 10px 12px;
-    border-radius: 12px;
+    padding: 14px;
+    border-radius: 18px;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.96));
     box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
     color: #334155;
@@ -710,7 +723,6 @@
     color: #1f2937;
     background: linear-gradient(180deg, rgba(239, 246, 255, 0.96), rgba(219, 234, 254, 0.93));
     border: 1px solid #bfdbfe;
-    margin-top: 0;
 }
 
 .feature-card-title {
@@ -835,9 +847,8 @@
     list-style: none;
     padding: 0;
     margin: 0;
-    flex: 1 1 auto;
+    max-height: 220px;
     overflow-y: auto;
-    max-height: none;
 }
 
 .search-empty {
@@ -877,69 +888,4 @@
     .panel-toolbar {
         gap: 4px;
     }
-}
-
-/* 新增：滚动隔离区域 */
-.panel-scroll-area {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    flex: 1 1 auto;
-    overflow-y: auto;
-    padding-bottom: 4px;
-}
-.panel-scroll-area::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-}
-.panel-scroll-area::-webkit-scrollbar-thumb {
-    background: rgba(0, 0, 0, 0.15);
-    border-radius: 3px;
-}
-.panel-scroll-area::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-/* 新增：官方同款大圆辅助倒计时 */
-#helper-floating-timer {
-    position: fixed;
-    right: 48px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 140px;
-    height: 140px;
-    border-radius: 50%;
-    background: radial-gradient(circle at center, #2e7d32 0%, #166534 100%);
-    box-shadow: 0 8px 32px rgba(0,0,0,0.3), inset 0 0 0 6px rgba(255,255,255,0.2);
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    z-index: 9999;
-    pointer-events: none;
-    transition: all 0.3s;
-    border: 3px solid #14532d;
-}
-#helper-floating-timer.warning {
-    background: radial-gradient(circle at center, #991b1b 0%, #7f1d1d 100%);
-    border-color: #450a0a;
-    box-shadow: 0 8px 32px rgba(220,38,38,0.3), inset 0 0 0 6px rgba(255,255,255,0.2);
-}
-#helper-floating-timer .time-label {
-    font-size: 16px;
-    margin-right: 4px;
-    margin-top: 10px;
-}
-#helper-floating-timer .time-value {
-    font-size: 52px;
-    font-weight: 900;
-    line-height: 1;
-    font-family: Arial, sans-serif;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-}
-#helper-floating-timer .time-unit {
-    font-size: 16px;
-    margin-left: 2px;
-    margin-top: 10px;
 }

@@ -236,15 +236,6 @@ function createPanel() {
                 <span class="status-tag tag-wait">等待题目数据...</span>
             </div>
 
-            <div class="panel-quick-actions">
-                <button id="btn-quick-settings" class="quick-action-btn" type="button">设置</button>
-                <button id="btn-quick-errors" class="quick-action-btn quick-action-warn" type="button">
-                    <span>错题本</span>
-                    <span id="quick-errors-badge" class="quick-action-badge">0</span>
-                </button>
-                <button id="btn-quick-search" class="quick-action-btn" type="button">搜索</button>
-            </div>
-
             <div id="practice-stats" class="helper-info-block practice-stats-card" style="display:none;"></div>
 
             <div id="book-practice-area" class="panel-feature-card book-feature-card" style="display:none;">
@@ -265,6 +256,15 @@ function createPanel() {
                     <button id="btn-book-wrong-only" class="helper-btn book-nav-btn feature-btn-secondary">🔴 仅错题</button>
                     <button id="btn-book-reset" class="helper-btn book-nav-btn feature-btn-danger">🔄 重置本章</button>
                 </div>
+            </div>
+
+            <div class="panel-quick-actions">
+                <button id="btn-quick-settings" class="quick-action-btn" type="button">设置</button>
+                <button id="btn-quick-errors" class="quick-action-btn quick-action-warn" type="button">
+                    <span>错题本</span>
+                    <span id="quick-errors-badge" class="quick-action-badge">0</span>
+                </button>
+                <button id="btn-quick-search" class="quick-action-btn" type="button">搜索</button>
             </div>
 
             <div class="panel-scroll-area">
