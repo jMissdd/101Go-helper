@@ -1,6 +1,6 @@
-console.log("101围棋助手: Content Script 已加载");
+﻿console.log("101鍥存鍔╂墜: Content Script 宸插姞杞?);
 
-// 1. 注入 inject.js
+// 1. 娉ㄥ叆 inject.js
 var s = document.createElement('script');
 s.src = chrome.runtime.getURL('inject.js');
 s.onload = function() { this.remove(); };
@@ -129,8 +129,8 @@ function applyPanelState(panel, nextState) {
 
     const minimizeBtn = panel.querySelector('#btn-minimize-panel');
     if (minimizeBtn) {
-        minimizeBtn.textContent = state.minimized ? '▣' : '－';
-        minimizeBtn.title = state.minimized ? '展开面板' : '最小化面板';
+        minimizeBtn.textContent = state.minimized ? '鈻? : '锛?;
+        minimizeBtn.title = state.minimized ? '灞曞紑闈㈡澘' : '鏈€灏忓寲闈㈡澘';
     }
 
     savePanelState(state);
@@ -196,19 +196,8 @@ function applySectionState(panel, nextState) {
 }
 
 // ==========================================
-// 2. 创建 UI 面板 (可拖动)
+// 2. 鍒涘缓 UI 闈㈡澘 (鍙嫋鍔?
 // ==========================================
-function updatePanelScale() {
-    const p = document.getElementById('weiqi-helper-panel');
-    if (p) {
-        let baseWinW = 1200;
-        let scale = Math.min(1, window.innerWidth / baseWinW);
-        scale = Math.max(0.65, scale); // 最小缩放保持在一个合理值
-        p.style.zoom = scale;
-    }
-}
-window.addEventListener('resize', updatePanelScale);
-
 function createPanel() {
     const existingPanel = document.getElementById('weiqi-helper-panel');
     if (existingPanel) return existingPanel;
@@ -220,89 +209,26 @@ function createPanel() {
     panel.innerHTML = `
         <div id="weiqi-helper-header">
             <div class="panel-title-group">
-                <span class="panel-title">101围棋助手</span>
-                <span id="header-mode-badge" class="panel-mode-badge">浏览模式</span>
+                <span class="panel-title">101鍥存鍔╂墜</span>
+                <span id="header-mode-badge" class="panel-mode-badge">娴忚妯″紡</span>
             </div>
             <div class="panel-toolbar">
-                <button class="toolbar-preset-btn" type="button" data-preset="small" title="紧凑尺寸">小</button>
-                <button class="toolbar-preset-btn" type="button" data-preset="medium" title="标准尺寸">中</button>
-                <button class="toolbar-preset-btn" type="button" data-preset="large" title="扩展尺寸">大</button>
-                <button id="btn-minimize-panel" class="toolbar-icon-btn" type="button" title="最小化面板">－</button>
-                <button class="close-btn toolbar-icon-btn" type="button" title="关闭面板">×</button>
+                <button class="toolbar-preset-btn" type="button" data-preset="small" title="绱у噾灏哄">灏?/button>
+                <button class="toolbar-preset-btn" type="button" data-preset="medium" title="鏍囧噯灏哄">涓?/button>
+                <button class="toolbar-preset-btn" type="button" data-preset="large" title="鎵╁睍灏哄">澶?/button>
+                <button id="btn-minimize-panel" class="toolbar-icon-btn" type="button" title="鏈€灏忓寲闈㈡澘">锛?/button>
+                <button class="close-btn toolbar-icon-btn" type="button" title="鍏抽棴闈㈡澘">脳</button>
             </div>
         </div>
         <div id="weiqi-helper-content">
             <div id="helper-status" class="helper-info-block status-card">
-                <span class="status-tag tag-wait">等待题目数据...</span>
+                <span class="status-tag tag-wait">绛夊緟棰樼洰鏁版嵁...</span>
             </div>
 
-            <div class="panel-quick-actions">
-                <button id="btn-quick-settings" class="quick-action-btn" type="button">设置</button>
-                <button id="btn-quick-errors" class="quick-action-btn quick-action-warn" type="button">
-                    <span>错题本</span>
-                    <span id="quick-errors-badge" class="quick-action-badge">0</span>
-                </button>
-                <button id="btn-quick-search" class="quick-action-btn" type="button">搜索</button>
-            </div>
-
-            <div class="panel-scroll-area">
-            <section id="helper-mode-section" class="panel-section-card" data-section="settings">
-                <button id="btn-toggle-settings-section" class="panel-section-header" type="button">
-                    <span>模式与限时</span>
-                    <span id="settings-section-hint" class="panel-section-hint">当前配置</span>
-                </button>
-                <div class="panel-section-body">
-                    <div id="helper-mode-controls" class="panel-settings-grid">
-                        <div class="panel-setting-row">
-                            <span class="panel-setting-label">模式</span>
-                            <select id="helper-mode" class="panel-input panel-select">
-                                <option value="browse">浏览模式</option>
-                                <option value="practice">做题模式</option>
-                                <option value="book">棋书练习</option>
-                            </select>
-                        </div>
-                        <div class="panel-setting-row">
-                            <span class="panel-setting-label">限时(秒)</span>
-                            <input id="helper-time-limit" type="number" min="5" step="5" class="panel-input panel-input-number" />
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <div id="practice-stats" class="helper-info-block practice-stats-card" style="display:none; margin-top:8px;"></div>
-
-            <section id="error-book-section" class="panel-section-card" data-section="error">
-                <button id="btn-show-errors" class="panel-section-header panel-section-header-warn" type="button">
-                    <span>错题本重刷</span>
-                    <span id="error-section-hint" class="panel-section-hint">待复习 0</span>
-                </button>
-                <div class="panel-section-body">
-                    <div id="error-book-area" class="error-book-area">
-                        <div class="error-book-header">
-                            <div>
-                                <div class="error-book-title">错题本</div>
-                                <div class="error-book-subtitle">仅做题模式下，错题重刷做对后会自动移出待复习列表</div>
-                            </div>
-                            <button id="btn-clear-errors" class="helper-btn error-clear-btn">清空</button>
-                        </div>
-
-                        <div id="error-book-summary" class="error-book-summary"></div>
-
-                        <div class="error-book-toolbar">
-                            <button id="btn-error-filter-review" class="helper-btn error-filter-btn active">待复习</button>
-                            <button id="btn-error-filter-all" class="helper-btn error-filter-btn">全部</button>
-                            <button id="btn-error-filter-resolved" class="helper-btn error-filter-btn">已刷回</button>
-                        </div>
-
-                        <ul id="error-list" class="error-book-list">
-                            <li class="error-book-empty">加载中...</li>
-                        </ul>
-                    </div>
-                </div>
-            </section>
+            <div id="practice-stats" class="helper-info-block practice-stats-card" style="display:none;"></div>
 
             <div id="book-practice-area" class="panel-feature-card book-feature-card" style="display:none;">
-                <div class="feature-card-title">📘 棋书练习</div>
+                <div class="feature-card-title">馃摌 妫嬩功缁冧範</div>
                 <div id="book-info" class="feature-card-meta"></div>
                 <div id="book-progress-bar" class="book-progress-wrap">
                     <div class="book-progress-track">
@@ -312,41 +238,103 @@ function createPanel() {
                 </div>
                 <div id="book-stats" class="feature-card-stats"></div>
                 <div class="feature-card-actions">
-                    <button id="btn-book-prev" class="helper-btn book-nav-btn feature-btn-secondary">⬅ 上一题</button>
-                    <button id="btn-book-next" class="helper-btn book-nav-btn feature-btn-primary">下一题 ➡</button>
+                    <button id="btn-book-prev" class="helper-btn book-nav-btn feature-btn-secondary">猬?涓婁竴棰?/button>
+                    <button id="btn-book-next" class="helper-btn book-nav-btn feature-btn-primary">涓嬩竴棰?鉃?/button>
                 </div>
                 <div class="feature-card-actions feature-card-actions-tight">
-                    <button id="btn-book-wrong-only" class="helper-btn book-nav-btn feature-btn-secondary">🔴 仅错题</button>
-                    <button id="btn-book-reset" class="helper-btn book-nav-btn feature-btn-danger">🔄 重置本章</button>
+                    <button id="btn-book-wrong-only" class="helper-btn book-nav-btn feature-btn-secondary">馃敶 浠呴敊棰?/button>
+                    <button id="btn-book-reset" class="helper-btn book-nav-btn feature-btn-danger">馃攧 閲嶇疆鏈珷</button>
                 </div>
             </div>
 
-            <section id="book-search-section" class="panel-section-card" data-section="search">
-                <button id="btn-toggle-search-section" class="panel-section-header" type="button">
-                    <span>棋书搜索</span>
-                    <span class="panel-section-hint">367 本可搜</span>
+            <div class="panel-quick-actions">
+                <button id="btn-quick-settings" class="quick-action-btn" type="button">璁剧疆</button>
+                <button id="btn-quick-errors" class="quick-action-btn quick-action-warn" type="button">
+                    <span>閿欓鏈?/span>
+                    <span id="quick-errors-badge" class="quick-action-badge">0</span>
+                </button>
+                <button id="btn-quick-search" class="quick-action-btn" type="button">鎼滅储</button>
+            </div>
+
+            <div class="panel-scroll-area">
+            <section id="helper-mode-section" class="panel-section-card" data-section="settings">
+                <button id="btn-toggle-settings-section" class="panel-section-header" type="button">
+                    <span>妯″紡涓庨檺鏃?/span>
+                    <span id="settings-section-hint" class="panel-section-hint">褰撳墠閰嶇疆</span>
                 </button>
                 <div class="panel-section-body">
-                    <div id="book-search-area" class="search-section-body">
-                        <div class="search-input-row">
-                            <input id="book-search-input" type="text" placeholder="书名 / 作者 / 难度" class="panel-input search-input" />
-                            <button id="btn-book-search" class="helper-btn search-btn">搜索</button>
+                    <div id="helper-mode-controls" class="panel-settings-grid">
+                        <div class="panel-setting-row">
+                            <span class="panel-setting-label">妯″紡</span>
+                            <select id="helper-mode" class="panel-input panel-select">
+                                <option value="browse">娴忚妯″紡</option>
+                                <option value="practice">鍋氶妯″紡</option>
+                                <option value="book">妫嬩功缁冧範</option>
+                            </select>
                         </div>
-                        <div id="book-search-status" class="search-status" style="display:none;"></div>
-                        <ul id="book-search-results" class="search-results-list">
-                            <li class="search-empty">输入关键词搜索棋书...</li>
+                        <div class="panel-setting-row">
+                            <span class="panel-setting-label">闄愭椂(绉?</span>
+                            <input id="helper-time-limit" type="number" min="5" step="5" class="panel-input panel-input-number" />
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="error-book-section" class="panel-section-card" data-section="error">
+                <button id="btn-show-errors" class="panel-section-header panel-section-header-warn" type="button">
+                    <span>閿欓鏈噸鍒?/span>
+                    <span id="error-section-hint" class="panel-section-hint">寰呭涔?0</span>
+                </button>
+                <div class="panel-section-body">
+                    <div id="error-book-area" class="error-book-area">
+                        <div class="error-book-header">
+                            <div>
+                                <div class="error-book-title">閿欓鏈?/div>
+                                <div class="error-book-subtitle">浠呭仛棰樻ā寮忎笅锛岄敊棰橀噸鍒峰仛瀵瑰悗浼氳嚜鍔ㄧЩ鍑哄緟澶嶄範鍒楄〃</div>
+                            </div>
+                            <button id="btn-clear-errors" class="helper-btn error-clear-btn">娓呯┖</button>
+                        </div>
+
+                        <div id="error-book-summary" class="error-book-summary"></div>
+
+                        <div class="error-book-toolbar">
+                            <button id="btn-error-filter-review" class="helper-btn error-filter-btn active">寰呭涔?/button>
+                            <button id="btn-error-filter-all" class="helper-btn error-filter-btn">鍏ㄩ儴</button>
+                            <button id="btn-error-filter-resolved" class="helper-btn error-filter-btn">宸插埛鍥?/button>
+                        </div>
+
+                        <ul id="error-list" class="error-book-list">
+                            <li class="error-book-empty">鍔犺浇涓?..</li>
                         </ul>
                     </div>
                 </div>
             </section>
-            </div>
+
+            <section id="book-search-section" class="panel-section-card" data-section="search">
+                <button id="btn-toggle-search-section" class="panel-section-header" type="button">
+                    <span>妫嬩功鎼滅储</span>
+                    <span class="panel-section-hint">367 鏈彲鎼?/span>
+                </button>
+                <div class="panel-section-body">
+                    <div id="book-search-area" class="search-section-body">
+                        <div class="search-input-row">
+                            <input id="book-search-input" type="text" placeholder="涔﹀悕 / 浣滆€?/ 闅惧害" class="panel-input search-input" />
+                            <button id="btn-book-search" class="helper-btn search-btn">鎼滅储</button>
+                        </div>
+                        <div id="book-search-status" class="search-status" style="display:none;"></div>
+                        <ul id="book-search-results" class="search-results-list">
+                            <li class="search-empty">杈撳叆鍏抽敭璇嶆悳绱㈡涔?..</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+                </div>
         </div>
-        <div id="weiqi-helper-resizer" title="拖拽调整尺寸"></div>
+        <div id="weiqi-helper-resizer" title="鎷栨嫿璋冩暣灏哄"></div>
     `;
     document.body.appendChild(panel);
     applyPanelState(panel, panelState);
     applySectionState(panel, sectionState);
-    updatePanelScale();
 
     const header = panel.querySelector('#weiqi-helper-header');
     const resizer = panel.querySelector('#weiqi-helper-resizer');
@@ -375,11 +363,11 @@ function createPanel() {
     }
 
     function updateModeDecorations() {
-        const modeLabels = { browse: '浏览模式', practice: '做题模式', book: '棋书练习' };
+        const modeLabels = { browse: '娴忚妯″紡', practice: '鍋氶妯″紡', book: '妫嬩功缁冧範' };
         const badge = panel.querySelector('#header-mode-badge');
         if (badge) badge.textContent = modeLabels[helperMode] || helperMode;
         const settingsHint = panel.querySelector('#settings-section-hint');
-        if (settingsHint) settingsHint.textContent = `${modeLabels[helperMode] || helperMode} · ${practiceTimeLimitSec}s`;
+        if (settingsHint) settingsHint.textContent = `${modeLabels[helperMode] || helperMode} 路 ${practiceTimeLimitSec}s`;
     }
 
     panel.querySelectorAll('.toolbar-preset-btn').forEach(btn => {
@@ -474,7 +462,7 @@ function createPanel() {
     panel.querySelector('#btn-toggle-search-section').addEventListener('click', () => toggleSection('search'));
 
     panel.querySelector('#btn-clear-errors').addEventListener('click', () => {
-        if (confirm('确定要清空所有错题记录吗？')) {
+        if (confirm('纭畾瑕佹竻绌烘墍鏈夐敊棰樿褰曞悧锛?)) {
             clearErrorBook().then(() => renderErrorBook(currentErrorFilter));
         }
     });
@@ -498,7 +486,7 @@ function createPanel() {
     errorFilterAllBtn.addEventListener('click', () => setErrorFilter('all'));
     errorFilterResolvedBtn.addEventListener('click', () => setErrorFilter('resolved'));
 
-    // 棋书搜索绑定
+    // 妫嬩功鎼滅储缁戝畾
     let _bookListCache = null;
     const bookSearchInput = panel.querySelector('#book-search-input');
     const bookSearchBtn = panel.querySelector('#btn-book-search');
@@ -508,13 +496,13 @@ function createPanel() {
         const keyword = bookSearchInput.value;
         if (!_bookListCache) {
             bookSearchStatus.style.display = 'block';
-            bookSearchStatus.textContent = '⏳ 首次加载棋书数据...';
+            bookSearchStatus.textContent = '鈴?棣栨鍔犺浇妫嬩功鏁版嵁...';
             _bookListCache = await fetchBookList();
             if (_bookListCache.length > 0) {
-                bookSearchStatus.textContent = `✅ 已加载 ${_bookListCache.length} 本棋书`;
+                bookSearchStatus.textContent = `鉁?宸插姞杞?${_bookListCache.length} 鏈涔;
                 setTimeout(() => { bookSearchStatus.style.display = 'none'; }, 2000);
             } else {
-                bookSearchStatus.textContent = '❌ 加载失败，请检查网络后重试';
+                bookSearchStatus.textContent = '鉂?鍔犺浇澶辫触锛岃妫€鏌ョ綉缁滃悗閲嶈瘯';
             }
         }
         const results = searchBooks(_bookListCache, keyword);
@@ -526,7 +514,7 @@ function createPanel() {
         if (e.key === 'Enter') doBookSearch();
     });
 
-    // 棋书练习按钮绑定
+    // 妫嬩功缁冧範鎸夐挳缁戝畾
     panel.querySelector('#btn-book-next').addEventListener('click', () => {
         const nextQid = getNextBookQid();
         if (nextQid) {
@@ -534,12 +522,12 @@ function createPanel() {
         } else if (bookWrongOnly) {
             const wrongCount = bookProgress ? Object.values(bookProgress.doneMap).filter(d => d.status === 2).length : 0;
             if (wrongCount === 0) {
-                alert('当前章节还没有错题记录，先做几道题吧！');
+                alert('褰撳墠绔犺妭杩樻病鏈夐敊棰樿褰曪紝鍏堝仛鍑犻亾棰樺惂锛?);
             } else {
-                alert('仅错题模式：已是最后一道错题（共 ' + wrongCount + ' 题）');
+                alert('浠呴敊棰樻ā寮忥細宸叉槸鏈€鍚庝竴閬撻敊棰橈紙鍏?' + wrongCount + ' 棰橈級');
             }
         } else {
-            alert('已是本章最后一题');
+            alert('宸叉槸鏈珷鏈€鍚庝竴棰?);
         }
     });
     panel.querySelector('#btn-book-prev').addEventListener('click', () => {
@@ -549,18 +537,18 @@ function createPanel() {
         } else if (bookWrongOnly) {
             const wrongCount = bookProgress ? Object.values(bookProgress.doneMap).filter(d => d.status === 2).length : 0;
             if (wrongCount === 0) {
-                alert('当前章节还没有错题记录，先做几道题吧！');
+                alert('褰撳墠绔犺妭杩樻病鏈夐敊棰樿褰曪紝鍏堝仛鍑犻亾棰樺惂锛?);
             } else {
-                alert('仅错题模式：已是第一道错题（共 ' + wrongCount + ' 题）');
+                alert('浠呴敊棰樻ā寮忥細宸叉槸绗竴閬撻敊棰橈紙鍏?' + wrongCount + ' 棰橈級');
             }
         } else {
-            alert('已是本章第一题');
+            alert('宸叉槸鏈珷绗竴棰?);
         }
     });
     panel.querySelector('#btn-book-wrong-only').addEventListener('click', () => {
         bookWrongOnly = !bookWrongOnly;
         const btn = panel.querySelector('#btn-book-wrong-only');
-        btn.textContent = bookWrongOnly ? '📋 全部题目' : '🔴 仅错题';
+        btn.textContent = bookWrongOnly ? '馃搵 鍏ㄩ儴棰樼洰' : '馃敶 浠呴敊棰?;
         btn.style.background = bookWrongOnly ? '#ef4444' : '';
         btn.style.color = bookWrongOnly ? 'white' : '';
         if (bookProgress) {
@@ -570,7 +558,7 @@ function createPanel() {
     });
     panel.querySelector('#btn-book-reset').addEventListener('click', () => {
         if (!bookContext) return;
-        if (!confirm(`确定重置「${bookContext.bookName || '本章'}」的做题进度吗？`)) return;
+        if (!confirm(`纭畾閲嶇疆銆?{bookContext.bookName || '鏈珷'}銆嶇殑鍋氶杩涘害鍚楋紵`)) return;
         bookProgress = {
             doneMap: {},
             stats: { total: bookChapterQs.length, done: 0, correct: 0, wrong: 0, timeoutWrong: 0, streak: 0 },
@@ -602,17 +590,17 @@ function createPanel() {
             initBookPractice();
         }
         updateModeDecorations();
-        // 切换模式时自动调整分区展开状态（只在用户主动切换时触发一次）
+        // 鍒囨崲妯″紡鏃惰嚜鍔ㄨ皟鏁村垎鍖哄睍寮€鐘舵€侊紙鍙湪鐢ㄦ埛涓诲姩鍒囨崲鏃惰Е鍙戜竴娆★級
         {
             const sects = loadSectionState();
             if (helperMode === 'book') {
-                // 棋书模式：展开搜索（找书），收起错题本（减少拥挤）
+                // 妫嬩功妯″紡锛氬睍寮€鎼滅储锛堟壘涔︼級锛屾敹璧烽敊棰樻湰锛堝噺灏戞嫢鎸わ級
                 applySectionState(panel, { ...sects, search: true, error: false });
             } else if (helperMode === 'practice') {
-                // 做题模式：收起搜索（做题时用不到），保留其他
+                // 鍋氶妯″紡锛氭敹璧锋悳绱紙鍋氶鏃剁敤涓嶅埌锛夛紝淇濈暀鍏朵粬
                 applySectionState(panel, { ...sects, search: false });
             }
-            // browse 模式不自动调整，保持用户上一次的状态
+            // browse 妯″紡涓嶈嚜鍔ㄨ皟鏁达紝淇濇寔鐢ㄦ埛涓婁竴娆＄殑鐘舵€?
         }
         updateUI(currentDisplayResult);
     });
@@ -639,17 +627,17 @@ function createPanel() {
     return panel;
 }
 
-// 初始化面板
+// 鍒濆鍖栭潰鏉?
 createPanel();
 
 function getCurrentPracticeStatsText() {
     const s = practiceSession.stats;
     const accuracy = s.total > 0 ? Math.round((s.correct / s.total) * 100) : 0;
-    return `📈 做题统计：总${s.total} | 对${s.correct} | 错${s.wrong}（超时${s.timeoutWrong}） | 正确率${accuracy}%`;
+    return `馃搱 鍋氶缁熻锛氭€?{s.total} | 瀵?{s.correct} | 閿?{s.wrong}锛堣秴鏃?{s.timeoutWrong}锛?| 姝ｇ‘鐜?{accuracy}%`;
 }
 
 // ==========================================
-// 2.5 IndexedDB 错题本存储逻辑
+// 2.5 IndexedDB 閿欓鏈瓨鍌ㄩ€昏緫
 // ==========================================
 const DB_NAME = '101WeiqiHelperDB';
 const STORE_NAME = 'error_book';
@@ -660,7 +648,7 @@ const TRUSTED_101_HOSTS = new Set([
     '101weiqi.cn',
 ]);
 
-// 根据当前域名返回正确的 101 基础 URL（同时兼容 .cn 和 .com）
+// 鏍规嵁褰撳墠鍩熷悕杩斿洖姝ｇ‘鐨?101 鍩虹 URL锛堝悓鏃跺吋瀹?.cn 鍜?.com锛?
 function get101BaseUrl() {
     const host = window.location.hostname;
     return host.endsWith('.com') ? 'https://www.101weiqi.com' : 'https://www.101weiqi.cn';
@@ -682,7 +670,7 @@ function getDifficultyRank(levelname) {
 function groupErrorsByDifficulty(errors) {
     const groups = {};
     errors.forEach((item) => {
-        const key = item.levelname || '未标注难度';
+        const key = item.levelname || '鏈爣娉ㄩ毦搴?;
         if (!groups[key]) groups[key] = [];
         groups[key].push(item);
     });
@@ -732,9 +720,9 @@ function renderErrorBookSummary(summaryEl, allErrors) {
     const reviewing = allErrors.filter(item => item.needReview !== false).length;
     const resolved = allErrors.filter(item => item.needReview === false).length;
     const cards = [
-        { label: '待复习', value: reviewing },
-        { label: '错题总数', value: allErrors.length },
-        { label: '已刷回', value: resolved },
+        { label: '寰呭涔?, value: reviewing },
+        { label: '閿欓鎬绘暟', value: allErrors.length },
+        { label: '宸插埛鍥?, value: resolved },
     ];
 
     summaryEl.replaceChildren(...cards.map(card => {
@@ -749,7 +737,7 @@ function renderErrorBookSummary(summaryEl, allErrors) {
     const quickBadge = document.getElementById('quick-errors-badge');
     if (quickBadge) quickBadge.textContent = String(reviewing);
     const errorHint = document.getElementById('error-section-hint');
-    if (errorHint) errorHint.textContent = `待复习 ${reviewing}`;
+    if (errorHint) errorHint.textContent = `寰呭涔?${reviewing}`;
 }
 
 function createErrorBookCard(err) {
@@ -760,7 +748,7 @@ function createErrorBookCard(err) {
         hour: '2-digit',
         minute: '2-digit',
     });
-    const statusText = err.needReview === false ? '已刷回' : '待复习';
+    const statusText = err.needReview === false ? '宸插埛鍥? : '寰呭涔?;
     const statusClass = err.needReview === false ? 'resolved' : 'reviewing';
 
     const card = createElement('div', 'error-card');
@@ -771,7 +759,7 @@ function createErrorBookCard(err) {
     const meta = createElement('div', 'error-card-meta');
     const stats = createElement('div', 'error-card-stats');
     const actions = createElement('div', 'error-card-actions');
-    const reviewBtn = createElement('button', 'helper-btn error-review-btn', '去重刷');
+    const reviewBtn = createElement('button', 'helper-btn error-review-btn', '鍘婚噸鍒?);
 
     if (safeUrl) {
         titleLink.href = safeUrl;
@@ -781,19 +769,19 @@ function createErrorBookCard(err) {
     } else {
         titleLink.href = '#';
         titleLink.addEventListener('click', (event) => event.preventDefault());
-        titleLink.title = '链接无效';
+        titleLink.title = '閾炬帴鏃犳晥';
         reviewBtn.disabled = true;
-        reviewBtn.title = '错题链接无效，无法跳转';
+        reviewBtn.title = '閿欓閾炬帴鏃犳晥锛屾棤娉曡烦杞?;
     }
 
     meta.append(
-        createElement('span', '', err.levelname || '未知难度'),
-        createElement('span', '', err.qtypename || '未知题型')
+        createElement('span', '', err.levelname || '鏈煡闅惧害'),
+        createElement('span', '', err.qtypename || '鏈煡棰樺瀷')
     );
 
     stats.append(
-        createElement('span', 'ok', `对 ${err.correctCount || 0}`),
-        createElement('span', 'bad', `错 ${err.errorCount || 0}`),
+        createElement('span', 'ok', `瀵?${err.correctCount || 0}`),
+        createElement('span', 'bad', `閿?${err.errorCount || 0}`),
         createElement('span', 'time', dateText)
     );
 
@@ -812,7 +800,7 @@ function createErrorBookGroup(group) {
     const summary = createElement('summary', 'error-group-header');
     summary.append(
         createElement('span', 'error-group-title', group.level),
-        createElement('span', 'error-group-count', `${group.items.length} 题`)
+        createElement('span', 'error-group-count', `${group.items.length} 棰榒)
     );
 
     const list = createElement('div', 'error-group-list');
@@ -833,7 +821,7 @@ function initDB() {
         request.onupgradeneeded = (event) => {
             const db = event.target.result;
             if (!db.objectStoreNames.contains(STORE_NAME)) {
-                // 以题目 ID 为主键
+                // 浠ラ鐩?ID 涓轰富閿?
                 const store = db.createObjectStore(STORE_NAME, { keyPath: 'qid' });
                 store.createIndex('timestamp', 'timestamp', { unique: false });
             }
@@ -900,14 +888,14 @@ async function saveProblemHistory(problemData, isCorrect = false, options = {}) 
             tx.onerror = () => reject(tx.error);
             tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
         });
-        console.log(`【历史记录】更新 Q-${qid}，对:${record.correctCount || 0} 错:${record.errorCount || 0} 待复习:${record.needReview !== false}`);
+        console.log(`銆愬巻鍙茶褰曘€戞洿鏂?Q-${qid}锛屽:${record.correctCount || 0} 閿?${record.errorCount || 0} 寰呭涔?${record.needReview !== false}`);
     } catch (e) {
-        console.error("保存历史记录失败:", e);
+        console.error("淇濆瓨鍘嗗彶璁板綍澶辫触:", e);
     }
 }
 
 async function getProblemHistory(qid) {
-    if (!qid) return null; // 防御空 key 报错
+    if (!qid) return null; // 闃插尽绌?key 鎶ラ敊
     try {
         const db = await initDB();
         return new Promise((resolve) => {
@@ -937,7 +925,7 @@ async function getErrorBook() {
             request.onerror = () => reject(request.error);
         });
     } catch (e) {
-        console.error("读取错题本失败:", e);
+        console.error("璇诲彇閿欓鏈け璐?", e);
         return [];
     }
 }
@@ -953,14 +941,14 @@ async function clearErrorBook() {
             request.onerror = () => reject(request.error);
         });
     } catch (e) {
-        console.error("清空错题本失败:", e);
+        console.error("娓呯┖閿欓鏈け璐?", e);
     }
 }
 
 function startErrorReview(qid, url) {
     const safeUrl = getTrusted101Url(url);
     if (!safeUrl) {
-        console.warn('[101围棋助手] 拒绝跳转到不受信任的地址:', url);
+        console.warn('[101鍥存鍔╂墜] 鎷掔粷璺宠浆鍒颁笉鍙椾俊浠荤殑鍦板潃:', url);
         return;
     }
 
@@ -968,7 +956,7 @@ function startErrorReview(qid, url) {
     localStorage.setItem(MODE_KEY, 'practice');
     const modeSelect = document.getElementById('helper-mode');
     if (modeSelect) modeSelect.value = 'practice';
-    console.log(`【错题重刷】开始重刷 Q-${qid}`);
+    console.log(`銆愰敊棰橀噸鍒枫€戝紑濮嬮噸鍒?Q-${qid}`);
     window.location.href = safeUrl;
 }
 
@@ -978,7 +966,7 @@ async function renderErrorBook(filter = 'needReview') {
     if (!listEl) return;
 
     const renderToken = ++errorBookRenderToken;
-    listEl.replaceChildren(createErrorBookEmptyItem('加载中...'));
+    listEl.replaceChildren(createErrorBookEmptyItem('鍔犺浇涓?..'));
 
     const allErrors = await getErrorBook();
     if (renderToken !== errorBookRenderToken) return;
@@ -990,7 +978,7 @@ async function renderErrorBook(filter = 'needReview') {
 
     if (errors.length === 0) {
         if (renderToken !== errorBookRenderToken) return;
-        listEl.replaceChildren(createErrorBookEmptyItem('当前筛选下没有题目，继续保持。'));
+        listEl.replaceChildren(createErrorBookEmptyItem('褰撳墠绛涢€変笅娌℃湁棰樼洰锛岀户缁繚鎸併€?));
         return;
     }
 
@@ -1000,41 +988,41 @@ async function renderErrorBook(filter = 'needReview') {
 
 
 // ==========================================
-// 2.7 棋书搜索逻辑
+// 2.7 妫嬩功鎼滅储閫昏緫
 // ==========================================
 const BOOK_CACHE_KEY = 'weiqi_helper_book_cache';
-const BOOK_CACHE_TTL = 24 * 60 * 60 * 1000; // 24小时
+const BOOK_CACHE_TTL = 24 * 60 * 60 * 1000; // 24灏忔椂
 
 // ==========================================
-// 2.8 棋书练习模式
+// 2.8 妫嬩功缁冧範妯″紡
 // ==========================================
 const BOOK_PROGRESS_PREFIX = 'book_progress:';
 
-// 棋书上下文（当前页面是否在棋书题目页）
+// 妫嬩功涓婁笅鏂囷紙褰撳墠椤甸潰鏄惁鍦ㄦ涔﹂鐩〉锛?
 let bookContext = null;
-// 当前章节完整题序列（跨页合并后）
+// 褰撳墠绔犺妭瀹屾暣棰樺簭鍒楋紙璺ㄩ〉鍚堝苟鍚庯級
 let bookChapterQs = [];
-// 当前章节进度对象
+// 褰撳墠绔犺妭杩涘害瀵硅薄
 let bookProgress = null;
-// 错题筛选开关
+// 閿欓绛涢€夊紑鍏?
 let bookWrongOnly = false;
 
 /**
- * 从 inject.js 传来的 bookContext 判断当前是否在棋书做题页
+ * 浠?inject.js 浼犳潵鐨?bookContext 鍒ゆ柇褰撳墠鏄惁鍦ㄦ涔﹀仛棰橀〉
  */
 function isOnBookQuestionPage() {
     return bookContext && bookContext.bookId && bookContext.chapterId && bookContext.qid;
 }
 
 /**
- * 获取进度存储 key
+ * 鑾峰彇杩涘害瀛樺偍 key
  */
 function getBookProgressKey(bookId, chapterId) {
     return `${BOOK_PROGRESS_PREFIX}${bookId}:${chapterId}`;
 }
 
 /**
- * 加载棋书章节进度
+ * 鍔犺浇妫嬩功绔犺妭杩涘害
  */
 function loadBookProgress(bookId, chapterId) {
     try {
@@ -1053,24 +1041,24 @@ function loadBookProgress(bookId, chapterId) {
 }
 
 /**
- * 保存棋书章节进度
+ * 淇濆瓨妫嬩功绔犺妭杩涘害
  */
 function saveBookProgress(bookId, chapterId, progress) {
     try {
         localStorage.setItem(getBookProgressKey(bookId, chapterId), JSON.stringify(progress));
-    } catch(e) { console.error('【棋书】保存进度失败:', e); }
+    } catch(e) { console.error('銆愭涔︺€戜繚瀛樿繘搴﹀け璐?', e); }
 }
 
 /**
- * 录入一道题的结果到棋书进度
+ * 褰曞叆涓€閬撻鐨勭粨鏋滃埌妫嬩功杩涘害
  */
 function recordBookResult(qid, status, reason) {
     if (!bookProgress || !bookContext) return;
     const key = String(qid);
-    if (bookProgress.doneMap[key]) return; // 已锁存不覆盖
+    if (bookProgress.doneMap[key]) return; // 宸查攣瀛樹笉瑕嗙洊
 
     const entry = {
-        status: status, // 1=对, 2=错
+        status: status, // 1=瀵? 2=閿?
         reason: reason, // 'result' | 'timeout'
         ts: Date.now(),
     };
@@ -1088,12 +1076,12 @@ function recordBookResult(qid, status, reason) {
     bookProgress.lastQid = key;
 
     saveBookProgress(bookContext.bookId, bookContext.chapterId, bookProgress);
-    console.log(`【棋书】Q-${qid} → ${status === 1 ? '对' : '错'}(${reason}), 完成${bookProgress.stats.done}/${bookProgress.stats.total}`);
+    console.log(`銆愭涔︺€慟-${qid} 鈫?${status === 1 ? '瀵? : '閿?}(${reason}), 瀹屾垚${bookProgress.stats.done}/${bookProgress.stats.total}`);
 }
 
 /**
- * 抓取章节完整题序列（跨页合并）
- * 利用 fetch 解析每页 HTML 中的 var nodedata = {...} 提取 qs
+ * 鎶撳彇绔犺妭瀹屾暣棰樺簭鍒楋紙璺ㄩ〉鍚堝苟锛?
+ * 鍒╃敤 fetch 瑙ｆ瀽姣忛〉 HTML 涓殑 var nodedata = {...} 鎻愬彇 qs
  */
 async function fetchChapterFullQs(bookId, chapterId) {
     const cacheKey = `book_chapter_qs:${bookId}:${chapterId}`;
@@ -1102,7 +1090,7 @@ async function fetchChapterFullQs(bookId, chapterId) {
         if (cached) {
             const parsed = JSON.parse(cached);
             if (Date.now() - parsed.ts < BOOK_CACHE_TTL && Array.isArray(parsed.qs) && parsed.qs.length > 0) {
-                console.log(`【棋书】缓存命中 ${parsed.qs.length} 题`);
+                console.log(`銆愭涔︺€戠紦瀛樺懡涓?${parsed.qs.length} 棰榒);
                 return parsed.qs;
             }
         }
@@ -1110,7 +1098,7 @@ async function fetchChapterFullQs(bookId, chapterId) {
 
     let allQs = [];
     try {
-        // 先抓第1页获取 maxpage
+        // 鍏堟姄绗?椤佃幏鍙?maxpage
         const url1 = `${get101BaseUrl()}/book/${bookId}/${chapterId}/?page=1`;
         const html1 = await fetch(url1).then(r => r.text());
         const nd1 = extractNodedata(html1);
@@ -1118,7 +1106,7 @@ async function fetchChapterFullQs(bookId, chapterId) {
         allQs = allQs.concat(nd1.qs);
         const maxpage = nd1.maxpage || 1;
 
-        // 并行抓取剩余页
+        // 骞惰鎶撳彇鍓╀綑椤?
         if (maxpage > 1) {
             const promises = [];
             for (let p = 2; p <= maxpage; p++) {
@@ -1129,19 +1117,19 @@ async function fetchChapterFullQs(bookId, chapterId) {
             pages.forEach(nd => { if (nd) allQs = allQs.concat(nd.qs); });
         }
 
-        // 按 qindex 排序
+        // 鎸?qindex 鎺掑簭
         allQs.sort((a, b) => a.qindex - b.qindex);
 
         localStorage.setItem(cacheKey, JSON.stringify({ qs: allQs, ts: Date.now() }));
-        console.log(`【棋书】抓取完成 ${allQs.length} 题（${maxpage}页）`);
+        console.log(`銆愭涔︺€戞姄鍙栧畬鎴?${allQs.length} 棰橈紙${maxpage}椤碉級`);
     } catch(e) {
-        console.error('【棋书】抓取章节题序列失败:', e);
+        console.error('銆愭涔︺€戞姄鍙栫珷鑺傞搴忓垪澶辫触:', e);
     }
     return allQs;
 }
 
 /**
- * 从 HTML 中提取 nodedata.pagedata 的 qs 和 maxpage
+ * 浠?HTML 涓彁鍙?nodedata.pagedata 鐨?qs 鍜?maxpage
  */
 function extractNodedata(html) {
     const match = html.match(/var\s+nodedata\s*=\s*(\{[\s\S]*?\});\s*(?:<\/script>|const |var |let )/);
@@ -1161,10 +1149,10 @@ function extractNodedata(html) {
 }
 
 /**
- * 找到下一题的 qid（按序 or 仅错题）
+ * 鎵惧埌涓嬩竴棰樼殑 qid锛堟寜搴?or 浠呴敊棰橈級
  */
 /**
- * 获取 doneMap 中用于查找的 key（优先用 publicid，fallback 到 qid）
+ * 鑾峰彇 doneMap 涓敤浜庢煡鎵剧殑 key锛堜紭鍏堢敤 publicid锛宖allback 鍒?qid锛?
  */
 function getBookQKey(q) {
     return String(q.publicid || q.qid);
@@ -1176,13 +1164,13 @@ function getNextBookQid() {
     const currentIdx = bookChapterQs.findIndex(q => q.qid === currentQid || q.publicid === currentQid);
 
     if (bookWrongOnly) {
-        // 仅错题模式：从 doneMap 中找 status===2 的题，key 与 recordBookResult 保持一致（publicid优先）
+        // 浠呴敊棰樻ā寮忥細浠?doneMap 涓壘 status===2 鐨勯锛宬ey 涓?recordBookResult 淇濇寔涓€鑷达紙publicid浼樺厛锛?
         const wrongQs = bookChapterQs.filter(q => {
             const d = bookProgress && bookProgress.doneMap[getBookQKey(q)];
             return d && d.status === 2;
         });
-        if (wrongQs.length === 0) return null; // 无错题
-        // 从当前位置之后找下一个错题，找不到就从头循环
+        if (wrongQs.length === 0) return null; // 鏃犻敊棰?
+        // 浠庡綋鍓嶄綅缃箣鍚庢壘涓嬩竴涓敊棰橈紝鎵句笉鍒板氨浠庡ご寰幆
         const afterCurrent = wrongQs.filter(q => {
             const idx = bookChapterQs.findIndex(x => x.qid === q.qid || x.publicid === q.publicid);
             return idx > currentIdx;
@@ -1190,7 +1178,7 @@ function getNextBookQid() {
         const target = afterCurrent.length > 0 ? afterCurrent[0] : wrongQs[0];
         return target.qid || target.publicid;
     } else {
-        // 顺序模式：下一题
+        // 椤哄簭妯″紡锛氫笅涓€棰?
         if (currentIdx < 0 || currentIdx >= bookChapterQs.length - 1) return null;
         const next = bookChapterQs[currentIdx + 1];
         return next.qid || next.publicid;
@@ -1198,7 +1186,7 @@ function getNextBookQid() {
 }
 
 /**
- * 找到上一题的 qid（支持 bookWrongOnly）
+ * 鎵惧埌涓婁竴棰樼殑 qid锛堟敮鎸?bookWrongOnly锛?
  */
 function getPrevBookQid() {
     if (!bookChapterQs.length || !bookContext) return null;
@@ -1206,7 +1194,7 @@ function getPrevBookQid() {
     const currentIdx = bookChapterQs.findIndex(q => q.qid === currentQid || q.publicid === currentQid);
 
     if (bookWrongOnly) {
-        // 仅错题模式：从当前位置之前找上一个错题，找不到就从末尾循环
+        // 浠呴敊棰樻ā寮忥細浠庡綋鍓嶄綅缃箣鍓嶆壘涓婁竴涓敊棰橈紝鎵句笉鍒板氨浠庢湯灏惧惊鐜?
         const wrongQs = bookChapterQs.filter(q => {
             const d = bookProgress && bookProgress.doneMap[getBookQKey(q)];
             return d && d.status === 2;
@@ -1226,7 +1214,7 @@ function getPrevBookQid() {
 }
 
 /**
- * 跳转到一道棋书题目
+ * 璺宠浆鍒颁竴閬撴涔﹂鐩?
  */
 function goToBookQuestion(qid) {
     if (!bookContext) return;
@@ -1234,24 +1222,24 @@ function goToBookQuestion(qid) {
 }
 
 /**
- * 获取棋书练习统计文本
+ * 鑾峰彇妫嬩功缁冧範缁熻鏂囨湰
  */
 function getBookStatsText() {
     if (!bookProgress) return '';
     const s = bookProgress.stats;
     const accuracy = s.done > 0 ? Math.round((s.correct / s.done) * 100) : 0;
     const total = s.total || bookChapterQs.length || '?';
-    let base = `📖 本章：${s.done}/${total} | 对${s.correct} 错${s.wrong}(超时${s.timeoutWrong}) | 连对${s.streak} | ${accuracy}%`;
+    let base = `馃摉 鏈珷锛?{s.done}/${total} | 瀵?{s.correct} 閿?{s.wrong}(瓒呮椂${s.timeoutWrong}) | 杩炲${s.streak} | ${accuracy}%`;
     if (bookWrongOnly) {
-        // 计算当前 doneMap 中的错题数量
+        // 璁＄畻褰撳墠 doneMap 涓殑閿欓鏁伴噺
         const wrongCount = Object.values(bookProgress.doneMap).filter(d => d.status === 2).length;
-        base += `\n🔴 仅错题模式：共 ${wrongCount} 道错题待刷`;
+        base += `\n馃敶 浠呴敊棰樻ā寮忥細鍏?${wrongCount} 閬撻敊棰樺緟鍒穈;
     }
     return base;
 }
 
 /**
- * 获取当前题在章节中的序号
+ * 鑾峰彇褰撳墠棰樺湪绔犺妭涓殑搴忓彿
  */
 function getCurrentBookIndex() {
     if (!bookChapterQs.length || !bookContext) return { current: 0, total: 0 };
@@ -1260,80 +1248,80 @@ function getCurrentBookIndex() {
 }
 
 /**
- * 初始化棋书练习：加载题序列 + 恢复进度
+ * 鍒濆鍖栨涔︾粌涔狅細鍔犺浇棰樺簭鍒?+ 鎭㈠杩涘害
  */
 async function initBookPractice() {
     if (!isOnBookQuestionPage()) return;
 
     const statusEl = document.getElementById('book-info');
-    if (statusEl) statusEl.textContent = '⏳ 正在加载章节题目...';
+    if (statusEl) statusEl.textContent = '鈴?姝ｅ湪鍔犺浇绔犺妭棰樼洰...';
 
-    // 显示棋书练习区
+    // 鏄剧ず妫嬩功缁冧範鍖?
     const area = document.getElementById('book-practice-area');
     if (area) area.style.display = 'block';
 
-    // 如果已有 inject.js 传来的当前页 qs 作为初始数据
+    // 濡傛灉宸叉湁 inject.js 浼犳潵鐨勫綋鍓嶉〉 qs 浣滀负鍒濆鏁版嵁
     if (bookContext.qs && bookContext.qs.length > 0 && bookChapterQs.length === 0) {
         bookChapterQs = bookContext.qs;
     }
 
-    // 异步抓取完整题序列
+    // 寮傛鎶撳彇瀹屾暣棰樺簭鍒?
     const fullQs = await fetchChapterFullQs(bookContext.bookId, bookContext.chapterId);
     if (fullQs.length > 0) {
         bookChapterQs = fullQs;
     }
 
-    // 加载进度
+    // 鍔犺浇杩涘害
     bookProgress = loadBookProgress(bookContext.bookId, bookContext.chapterId);
     bookProgress.stats.total = bookChapterQs.length;
     bookWrongOnly = bookProgress.wrongOnly || false;
 
-    // 恢复仅错题按钮状态
+    // 鎭㈠浠呴敊棰樻寜閽姸鎬?
     const wrongBtn = document.getElementById('btn-book-wrong-only');
     if (wrongBtn) {
-        wrongBtn.textContent = bookWrongOnly ? '📋 全部题目' : '🔴 仅错题';
+        wrongBtn.textContent = bookWrongOnly ? '馃搵 鍏ㄩ儴棰樼洰' : '馃敶 浠呴敊棰?;
         wrongBtn.style.background = bookWrongOnly ? '#ef4444' : '';
         wrongBtn.style.color = bookWrongOnly ? 'white' : '';
     }
 
-    // 确保当前题记入 practiceSession
+    // 纭繚褰撳墠棰樿鍏?practiceSession
     if (currentProblemId) {
         ensurePracticeState(currentProblemId, currentProblemData);
     }
 
     saveBookProgress(bookContext.bookId, bookContext.chapterId, bookProgress);
     updateUI(currentDisplayResult);
-    console.log(`【棋书】初始化完成: ${bookContext.bookName} / ${bookContext.chapterName}, ${bookChapterQs.length}题, 已完成${bookProgress.stats.done}`);
+    console.log(`銆愭涔︺€戝垵濮嬪寲瀹屾垚: ${bookContext.bookName} / ${bookContext.chapterName}, ${bookChapterQs.length}棰? 宸插畬鎴?{bookProgress.stats.done}`);
 }
 
 async function fetchBookList() {
-    // 先检查 localStorage 缓存
+    // 鍏堟鏌?localStorage 缂撳瓨
     try {
         const cached = localStorage.getItem(BOOK_CACHE_KEY);
         if (cached) {
             const parsed = JSON.parse(cached);
             if (Date.now() - parsed.timestamp < BOOK_CACHE_TTL && Array.isArray(parsed.data) && parsed.data.length > 0) {
-                console.log(`【棋书】从缓存加载 ${parsed.data.length} 本棋书`);
+                console.log(`銆愭涔︺€戜粠缂撳瓨鍔犺浇 ${parsed.data.length} 鏈涔);
                 return parsed.data;
             }
         }
     } catch(e) {}
 
-    // 从服务器获取
+    // 浠庢湇鍔″櫒鑾峰彇
     try {
         const resp = await fetch(`${get101BaseUrl()}/book/list/`);
         const html = await resp.text();
         const match = html.match(/var\s+g_books\s*=\s*(\[[\s\S]*?\]);/);
         if (!match) {
-            console.error('【棋书】未找到 g_books 数据');
+            console.error('銆愭涔︺€戞湭鎵惧埌 g_books 鏁版嵁');
             return [];
         }
         const books = JSON.parse(match[1]);
         localStorage.setItem(BOOK_CACHE_KEY, JSON.stringify({ data: books, timestamp: Date.now() }));
-        console.log(`【棋书】从服务器加载 ${books.length} 本棋书`);
+        console.log(`銆愭涔︺€戜粠鏈嶅姟鍣ㄥ姞杞?${books.length} 鏈涔);
         return books;
     } catch(e) {
-        console.error('【棋书】获取棋书列表失败:', e);
+        console.error('銆愭涔︺€戣幏鍙栨涔﹀垪琛ㄥけ璐?', e);
         return [];
     }
 }
@@ -1354,19 +1342,19 @@ function renderBookSearchResults(results, keyword) {
     if (!listEl) return;
 
     if (!keyword || !keyword.trim()) {
-        listEl.innerHTML = '<li style="color: #999; padding: 6px 0;">输入关键词搜索棋书...</li>';
+        listEl.innerHTML = '<li style="color: #999; padding: 6px 0;">杈撳叆鍏抽敭璇嶆悳绱㈡涔?..</li>';
         return;
     }
 
     if (results.length === 0) {
-        listEl.innerHTML = `<li style="color: #999; padding: 6px 0;">未找到匹配"${keyword}"的棋书</li>`;
+        listEl.innerHTML = `<li style="color: #999; padding: 6px 0;">鏈壘鍒板尮閰?${keyword}"鐨勬涔?/li>`;
         return;
     }
 
     listEl.innerHTML = '';
     const countInfo = document.createElement('li');
     countInfo.style.cssText = 'color: #666; padding: 4px 0; font-size: 11px; border-bottom: 1px solid #eee;';
-    countInfo.textContent = `找到 ${results.length} 本棋书`;
+    countInfo.textContent = `鎵惧埌 ${results.length} 鏈涔;
     listEl.appendChild(countInfo);
 
     const maxShow = 50;
@@ -1383,7 +1371,7 @@ function renderBookSearchResults(results, keyword) {
                 <span style="color:#666; font-size:11px; min-width:40px; text-align:right;">${b.levelname}</span>
             </div>
             <div style="font-size:11px; color:#999; margin-top:2px;">
-                ${b.qcount}题 · ${b.username}${descSnippet ? ' · ' + descSnippet : ''}
+                ${b.qcount}棰?路 ${b.username}${descSnippet ? ' 路 ' + descSnippet : ''}
             </div>
         `;
         listEl.appendChild(li);
@@ -1392,14 +1380,14 @@ function renderBookSearchResults(results, keyword) {
     if (results.length > maxShow) {
         const more = document.createElement('li');
         more.style.cssText = 'color: #999; padding: 4px 0; font-size: 11px; text-align: center;';
-        more.textContent = `还有 ${results.length - maxShow} 本未显示，请输入更精确的关键词`;
+        more.textContent = `杩樻湁 ${results.length - maxShow} 鏈湭鏄剧ず锛岃杈撳叆鏇寸簿纭殑鍏抽敭璇峘;
         listEl.appendChild(more);
     }
 }
 
 
 // ==========================================
-// 3. 数据处理逻辑
+// 3. 鏁版嵁澶勭悊閫昏緫
 // ==========================================
 let currentProblemData = null;
 let currentProblemHistory = null;
@@ -1456,19 +1444,19 @@ window.addEventListener("message", async function(event) {
     currentProblemData = event.data.data;
     const answerResult = event.data.answerResult;
     const isNewResult = event.data.isNewResult;
-    console.log("【助手】来源:", event.data.source, "| 结果:", answerResult, "| 新结果:", isNewResult);
+    console.log("銆愬姪鎵嬨€戞潵婧?", event.data.source, "| 缁撴灉:", answerResult, "| 鏂扮粨鏋?", isNewResult);
 
-    // 更新棋书上下文
+    // 鏇存柊妫嬩功涓婁笅鏂?
     if (event.data.bookContext) {
         bookContext = event.data.bookContext;
-        console.log("【棋书】上下文:", bookContext.bookName, '章节', bookContext.chapterId, '题', bookContext.qid);
-        // 自动初始化棋书练习（如果在棋书模式中）
+        console.log("銆愭涔︺€戜笂涓嬫枃:", bookContext.bookName, '绔犺妭', bookContext.chapterId, '棰?, bookContext.qid);
+        // 鑷姩鍒濆鍖栨涔︾粌涔狅紙濡傛灉鍦ㄦ涔︽ā寮忎腑锛?
         if (helperMode === 'book' && isOnBookQuestionPage() && bookChapterQs.length === 0) {
             initBookPractice();
         }
     }
     
-    // 如果切题了，重新获取历史记录
+    // 濡傛灉鍒囬浜嗭紝閲嶆柊鑾峰彇鍘嗗彶璁板綍
     if (currentProblemData && currentProblemData.publicid !== currentProblemId) {
         currentProblemId = currentProblemData.publicid;
         currentProblemHistory = await getProblemHistory(currentProblemId);
@@ -1477,7 +1465,7 @@ window.addEventListener("message", async function(event) {
     const incomingResult = (answerResult === null || answerResult === undefined) ? 0 : answerResult;
 
     if (helperMode === 'book' && isOnBookQuestionPage() && currentProblemId) {
-        // 棋书练习模式：结果锁存到棋书进度
+        // 妫嬩功缁冧範妯″紡锛氱粨鏋滈攣瀛樺埌妫嬩功杩涘害
         const state = ensurePracticeState(currentProblemId, currentProblemData);
         if (state && !state.locked) {
             if (incomingResult === 1 || incomingResult === 2) {
@@ -1485,7 +1473,7 @@ window.addEventListener("message", async function(event) {
                 recordBookResult(currentProblemId, incomingResult, 'result');
             } else {
                 await checkPracticeTimeoutForCurrent();
-                // 超时也录入棋书进度
+                // 瓒呮椂涔熷綍鍏ユ涔﹁繘搴?
                 if (state.locked && state.status === 2) {
                     recordBookResult(currentProblemId, 2, 'timeout');
                 }
@@ -1506,7 +1494,7 @@ window.addEventListener("message", async function(event) {
         currentDisplayResult = state && state.locked ? state.status : incomingResult;
         if (state && state.locked) currentCountdownSec = null;
     } else {
-        // 浏览模式不写错题统计
+        // 娴忚妯″紡涓嶅啓閿欓缁熻
         currentDisplayResult = incomingResult;
         currentCountdownSec = null;
     }
@@ -1518,7 +1506,7 @@ if (!practiceTimerHandle) {
     practiceTimerHandle = setInterval(async () => {
         if (helperMode === 'practice' || helperMode === 'book') {
             await checkPracticeTimeoutForCurrent();
-            // 棋书模式下超时也要录入棋书进度
+            // 妫嬩功妯″紡涓嬭秴鏃朵篃瑕佸綍鍏ユ涔﹁繘搴?
             if (helperMode === 'book' && currentProblemId) {
                 const state = practiceSession.byQid.get(String(currentProblemId));
                 if (state && state.locked && state.reason === 'timeout' && bookProgress) {
@@ -1531,7 +1519,7 @@ if (!practiceTimerHandle) {
 }
 
 // ==========================================
-// 4. UI 更新函数
+// 4. UI 鏇存柊鍑芥暟
 // ==========================================
 function updateFloatingTimer(finalResult) {
     let timerEl = document.getElementById('helper-floating-timer');
@@ -1559,13 +1547,13 @@ function updateUI(answerResult) {
     const statusDiv = document.getElementById('helper-status');
     if (!statusDiv || !currentProblemData) return;
 
-    const modeLabels = { browse: '👀 浏览模式', practice: '📝 做题模式', book: '📘 棋书练习' };
+    const modeLabels = { browse: '馃憖 娴忚妯″紡', practice: '馃摑 鍋氶妯″紡', book: '馃摌 妫嬩功缁冧範' };
     const finalResult = (answerResult === null || answerResult === undefined) ? 0 : answerResult;
     const toneClass = finalResult === 1 ? 'is-success' : finalResult === 2 ? 'is-fail' : 'is-pending';
-    const resultText = finalResult === 1 ? '✅ 本题已通过' : finalResult === 2 ? '❌ 本题未通过' : '⏳ 尚未作答';
+    const resultText = finalResult === 1 ? '鉁?鏈宸查€氳繃' : finalResult === 2 ? '鉂?鏈鏈€氳繃' : '鈴?灏氭湭浣滅瓟';
     const historyText = currentProblemHistory
-        ? `${currentProblemHistory.correctCount || 0} 对 / ${currentProblemHistory.errorCount || 0} 错`
-        : '初次挑战';
+        ? `${currentProblemHistory.correctCount || 0} 瀵?/ ${currentProblemHistory.errorCount || 0} 閿檂
+        : '鍒濇鎸戞垬';
 
     statusDiv.className = `helper-info-block status-card ${toneClass}`;
 
@@ -1576,7 +1564,7 @@ function updateUI(answerResult) {
             </div>
             <div class="status-card-meta-row" style="margin-top: 0; gap: 4px;">
                 <span class="status-meta-pill" style="font-size:10px; padding:2px 6px;">Q-${currentProblemData.publicid || '?'}</span>
-                <span class="status-meta-pill" style="font-size:10px; padding:2px 6px;">${currentProblemData.levelname || '未知'}</span>
+                <span class="status-meta-pill" style="font-size:10px; padding:2px 6px;">${currentProblemData.levelname || '鏈煡'}</span>
             </div>
         </div>
     `;
@@ -1587,16 +1575,16 @@ function updateUI(answerResult) {
         statusHtml += `
             <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding-top: 8px; border-top: 1px dashed rgba(0,0,0,0.1);">
                 <div style="${countdownClass}">
-                    <span>⏳ 测验: ${practiceTimeLimitSec}s</span>
-                    <strong style="margin-left:4px;">剩 ${countdown}</strong>
+                    <span>鈴?娴嬮獙: ${practiceTimeLimitSec}s</span>
+                    <strong style="margin-left:4px;">鍓?${countdown}</strong>
                 </div>
-                <div style="color: #475569;">📚 历史：${historyText}</div>
+                <div style="color: #475569;">馃摎 鍘嗗彶锛?{historyText}</div>
             </div>
         `;
     } else {
         statusHtml += `
             <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding-top: 8px; border-top: 1px dashed rgba(0,0,0,0.1);">
-                <div style="color: #475569;">📚 历史：${historyText}</div>
+                <div style="color: #475569;">馃摎 鍘嗗彶锛?{historyText}</div>
             </div>
         `;
     }
@@ -1606,9 +1594,9 @@ function updateUI(answerResult) {
     const headerBadge = document.getElementById('header-mode-badge');
     if (headerBadge) headerBadge.textContent = modeLabels[helperMode] || helperMode;
     const settingsHint = document.getElementById('settings-section-hint');
-    if (settingsHint) settingsHint.textContent = `${modeLabels[helperMode] || helperMode} · ${practiceTimeLimitSec}s`;
+    if (settingsHint) settingsHint.textContent = `${modeLabels[helperMode] || helperMode} 路 ${practiceTimeLimitSec}s`;
 
-    // 棋书练习区渲染
+    // 妫嬩功缁冧範鍖烘覆鏌?
     const bookArea = document.getElementById('book-practice-area');
     if (bookArea) {
         if (helperMode === 'book' && isOnBookQuestionPage()) {
@@ -1620,13 +1608,13 @@ function updateUI(answerResult) {
 
             if (infoEl && bookContext) {
                 const pos = getCurrentBookIndex();
-                infoEl.textContent = `📘 ${bookContext.bookName || '棋书'} / ${bookContext.chapterName || '章节'} — 第${pos.current}/${pos.total}题`;
+                infoEl.textContent = `馃摌 ${bookContext.bookName || '妫嬩功'} / ${bookContext.chapterName || '绔犺妭'} 鈥?绗?{pos.current}/${pos.total}棰榒;
             }
             if (statsEl) statsEl.textContent = getBookStatsText();
             if (progressFill && progressText && bookProgress) {
                 const pct = bookProgress.stats.total > 0 ? Math.round((bookProgress.stats.done / bookProgress.stats.total) * 100) : 0;
                 progressFill.style.width = pct + '%';
-                progressText.textContent = `进度 ${pct}%（${bookProgress.stats.done}/${bookProgress.stats.total}）`;
+                progressText.textContent = `杩涘害 ${pct}%锛?{bookProgress.stats.done}/${bookProgress.stats.total}锛塦;
             }
         } else {
             bookArea.style.display = 'none';
@@ -1644,6 +1632,4 @@ function updateUI(answerResult) {
             statsDiv.innerHTML = '';
         }
     }
-
-    updateFloatingTimer(finalResult);
 }

@@ -1533,28 +1533,6 @@ if (!practiceTimerHandle) {
 // ==========================================
 // 4. UI 更新函数
 // ==========================================
-function updateFloatingTimer(finalResult) {
-    let timerEl = document.getElementById('helper-floating-timer');
-    if (!timerEl) {
-        timerEl = document.createElement('div');
-        timerEl.id = 'helper-floating-timer';
-        timerEl.innerHTML = '<span class="time-label">剩余</span><span id="helper-floating-timer-val" class="time-value">--</span><span class="time-unit">s</span>';
-        document.body.appendChild(timerEl);
-    }
-    if ((helperMode === 'practice' || helperMode === 'book') && currentCountdownSec !== null && finalResult === 0) {
-        timerEl.style.display = 'flex';
-        const valEl = document.getElementById('helper-floating-timer-val');
-        if (valEl) valEl.textContent = Math.max(0, currentCountdownSec);
-        if (currentCountdownSec <= 10) {
-            timerEl.classList.add('warning');
-        } else {
-            timerEl.classList.remove('warning');
-        }
-    } else {
-        timerEl.style.display = 'none';
-    }
-}
-
 function updateUI(answerResult) {
     const statusDiv = document.getElementById('helper-status');
     if (!statusDiv || !currentProblemData) return;
@@ -1644,6 +1622,4 @@ function updateUI(answerResult) {
             statsDiv.innerHTML = '';
         }
     }
-
-    updateFloatingTimer(finalResult);
 }
