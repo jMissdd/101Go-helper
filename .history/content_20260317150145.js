@@ -198,17 +198,6 @@ function applySectionState(panel, nextState) {
 // ==========================================
 // 2. 创建 UI 面板 (可拖动)
 // ==========================================
-function updatePanelScale() {
-    const p = document.getElementById('weiqi-helper-panel');
-    if (p) {
-        let baseWinW = 1200;
-        let scale = Math.min(1, window.innerWidth / baseWinW);
-        scale = Math.max(0.65, scale); // 最小缩放保持在一个合理值
-        p.style.zoom = scale;
-    }
-}
-window.addEventListener('resize', updatePanelScale);
-
 function createPanel() {
     const existingPanel = document.getElementById('weiqi-helper-panel');
     if (existingPanel) return existingPanel;
@@ -245,29 +234,6 @@ function createPanel() {
                 <button id="btn-quick-search" class="quick-action-btn" type="button">搜索</button>
             </div>
 
-            <div id="practice-stats" class="helper-info-block practice-stats-card" style="display:none;"></div>
-
-            <div id="book-practice-area" class="panel-feature-card book-feature-card" style="display:none;">
-                <div class="feature-card-title">📘 棋书练习</div>
-                <div id="book-info" class="feature-card-meta"></div>
-                <div id="book-progress-bar" class="book-progress-wrap">
-                    <div class="book-progress-track">
-                        <div id="book-progress-fill" style="background:#8b5cf6; height:100%; width:0%; transition:width 0.3s;"></div>
-                    </div>
-                    <div id="book-progress-text" class="feature-card-meta feature-card-meta-tight"></div>
-                </div>
-                <div id="book-stats" class="feature-card-stats"></div>
-                <div class="feature-card-actions">
-                    <button id="btn-book-prev" class="helper-btn book-nav-btn feature-btn-secondary">⬅ 上一题</button>
-                    <button id="btn-book-next" class="helper-btn book-nav-btn feature-btn-primary">下一题 ➡</button>
-                </div>
-                <div class="feature-card-actions feature-card-actions-tight">
-                    <button id="btn-book-wrong-only" class="helper-btn book-nav-btn feature-btn-secondary">🔴 仅错题</button>
-                    <button id="btn-book-reset" class="helper-btn book-nav-btn feature-btn-danger">🔄 重置本章</button>
-                </div>
-            </div>
-
-            <div class="panel-scroll-area">
             <section id="helper-mode-section" class="panel-section-card" data-section="settings">
                 <button id="btn-toggle-settings-section" class="panel-section-header" type="button">
                     <span>模式与限时</span>
@@ -290,6 +256,8 @@ function createPanel() {
                     </div>
                 </div>
             </section>
+
+            <div id="practice-stats" class="helper-info-block practice-stats-card" style="display:none; margin-top:8px;"></div>
 
             <section id="error-book-section" class="panel-section-card" data-section="error">
                 <button id="btn-show-errors" class="panel-section-header panel-section-header-warn" type="button">
@@ -321,6 +289,26 @@ function createPanel() {
                 </div>
             </section>
 
+            <div id="book-practice-area" class="panel-feature-card book-feature-card" style="display:none;">
+                <div class="feature-card-title">📘 棋书练习</div>
+                <div id="book-info" class="feature-card-meta"></div>
+                <div id="book-progress-bar" class="book-progress-wrap">
+                    <div class="book-progress-track">
+                        <div id="book-progress-fill" style="background:#8b5cf6; height:100%; width:0%; transition:width 0.3s;"></div>
+                    </div>
+                    <div id="book-progress-text" class="feature-card-meta feature-card-meta-tight"></div>
+                </div>
+                <div id="book-stats" class="feature-card-stats"></div>
+                <div class="feature-card-actions">
+                    <button id="btn-book-prev" class="helper-btn book-nav-btn feature-btn-secondary">⬅ 上一题</button>
+                    <button id="btn-book-next" class="helper-btn book-nav-btn feature-btn-primary">下一题 ➡</button>
+                </div>
+                <div class="feature-card-actions feature-card-actions-tight">
+                    <button id="btn-book-wrong-only" class="helper-btn book-nav-btn feature-btn-secondary">🔴 仅错题</button>
+                    <button id="btn-book-reset" class="helper-btn book-nav-btn feature-btn-danger">🔄 重置本章</button>
+                </div>
+            </div>
+
             <section id="book-search-section" class="panel-section-card" data-section="search">
                 <button id="btn-toggle-search-section" class="panel-section-header" type="button">
                     <span>棋书搜索</span>
@@ -339,14 +327,12 @@ function createPanel() {
                     </div>
                 </div>
             </section>
-            </div>
         </div>
         <div id="weiqi-helper-resizer" title="拖拽调整尺寸"></div>
     `;
     document.body.appendChild(panel);
     applyPanelState(panel, panelState);
     applySectionState(panel, sectionState);
-    updatePanelScale();
 
     const header = panel.querySelector('#weiqi-helper-header');
     const resizer = panel.querySelector('#weiqi-helper-resizer');
@@ -362,16 +348,54 @@ function createPanel() {
         return applyPanelState(panel, nextState);
     }
 
-    function toggleSection(key) {
+    function applySectionState(panel, nextState) {
+        const state = { settings: true, error: false, search: false, ...nextState };
+        ['settings', 'error', 'search'].forEach(key => {
+            const section = panel.querySelector(`[data-section="${key}"]`);
+            if (!section) return;
+            const isVisible = !!state[key];
+            section.classList.toggle('is-collapsed', !isVisible);
+            // 排他机制：如果展开，它的 body 区域获取 flex 填充空间，其余折叠
+            if (isVisible) {
+                section.style.flex = '1 1 auto';
+                section.style.display = 'flex';
+                section.style.flexDirection = 'column';
+                section.style.minHeight = '0'; // 必须，让内部独立滚动起效
+            } else {
+                section.style.flex = 'none';
+                section.style.display = 'block';
+                section.style.minHeight = 'auto';
+            }
+        });
+
+        const mappings = [
+            ['settings', '#btn-quick-settings', '#btn-toggle-settings-section'],
+            ['error', '#btn-quick-errors', '#btn-show-errors'],
+            ['search', '#btn-quick-search', '#btn-toggle-search-section'],
+        ];
+
+        mappings.forEach(([key, quickSelector, sectionSelector]) => {
+            const quickBtn = panel.querySelector(quickSelector);
+            const sectionBtn = panel.querySelector(sectionSelector);
+            [quickBtn, sectionBtn].forEach(btn => {
+                if (!btn) return;
+                btn.classList.toggle('active', !!state[key]);
+                btn.setAttribute('aria-expanded', state[key] ? 'true' : 'false');
+            });
+        });
+
+        saveSectionState(state);
+        return state;
+    }
+
+    function toggleSectionMutualExclusive(key) {
+        // 互斥展开：点开某一个时，关闭其余两个。如果是点击已展开的，则收起（允许全收起）
         const current = loadSectionState();
-        const willBeOpen = !current[key];
-        
-        if (willBeOpen) {
-            ['settings', 'error', 'search'].forEach(k => current[k] = false);
+        const nextState = { settings: false, error: false, search: false };
+        if (!current[key]) {
+            nextState[key] = true; // 仅展开当前点击的此项
         }
-        
-        current[key] = willBeOpen;
-        applySectionState(panel, current);
+        applySectionState(panel, nextState);
     }
 
     function updateModeDecorations() {
@@ -1533,28 +1557,6 @@ if (!practiceTimerHandle) {
 // ==========================================
 // 4. UI 更新函数
 // ==========================================
-function updateFloatingTimer(finalResult) {
-    let timerEl = document.getElementById('helper-floating-timer');
-    if (!timerEl) {
-        timerEl = document.createElement('div');
-        timerEl.id = 'helper-floating-timer';
-        timerEl.innerHTML = '<span class="time-label">剩余</span><span id="helper-floating-timer-val" class="time-value">--</span><span class="time-unit">s</span>';
-        document.body.appendChild(timerEl);
-    }
-    if ((helperMode === 'practice' || helperMode === 'book') && currentCountdownSec !== null && finalResult === 0) {
-        timerEl.style.display = 'flex';
-        const valEl = document.getElementById('helper-floating-timer-val');
-        if (valEl) valEl.textContent = Math.max(0, currentCountdownSec);
-        if (currentCountdownSec <= 10) {
-            timerEl.classList.add('warning');
-        } else {
-            timerEl.classList.remove('warning');
-        }
-    } else {
-        timerEl.style.display = 'none';
-    }
-}
-
 function updateUI(answerResult) {
     const statusDiv = document.getElementById('helper-status');
     if (!statusDiv || !currentProblemData) return;
@@ -1570,36 +1572,30 @@ function updateUI(answerResult) {
     statusDiv.className = `helper-info-block status-card ${toneClass}`;
 
     let statusHtml = `
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <div style="font-size: 16px; font-weight: 900; color: #0f172a; display: flex; align-items: center; gap: 6px;">
-                <span>${resultText}</span>
-            </div>
-            <div class="status-card-meta-row" style="margin-top: 0; gap: 4px;">
-                <span class="status-meta-pill" style="font-size:10px; padding:2px 6px;">Q-${currentProblemData.publicid || '?'}</span>
-                <span class="status-meta-pill" style="font-size:10px; padding:2px 6px;">${currentProblemData.levelname || '未知'}</span>
-            </div>
+        <div class="status-card-head">
+            <span class="status-tag tag-success">数据捕获成功</span>
+            <span class="status-mode-pill">${modeLabels[helperMode] || helperMode}</span>
+        </div>
+        <div class="status-card-main">${resultText}</div>
+        <div class="status-card-meta-row">
+            <span class="status-meta-pill">题目 Q-${currentProblemData.publicid || '?'}</span>
+            <span class="status-meta-pill">${currentProblemData.levelname || '未知难度'}</span>
+            <span class="status-meta-pill">${currentProblemData.qtypename || '未知题型'}</span>
         </div>
     `;
 
     if (helperMode === 'practice' || helperMode === 'book') {
         const countdown = (currentCountdownSec === null) ? '--:--' : formatCountdown(currentCountdownSec);
-        const countdownClass = (currentCountdownSec !== null && currentCountdownSec <= 10) ? 'color: #b91c1c; font-weight:bold;' : 'color: #0f172a;';
+        const countdownClass = (currentCountdownSec !== null && currentCountdownSec <= 10) ? 'is-warning' : '';
         statusHtml += `
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding-top: 8px; border-top: 1px dashed rgba(0,0,0,0.1);">
-                <div style="${countdownClass}">
-                    <span>⏳ 测验: ${practiceTimeLimitSec}s</span>
-                    <strong style="margin-left:4px;">剩 ${countdown}</strong>
-                </div>
-                <div style="color: #475569;">📚 历史：${historyText}</div>
-            </div>
-        `;
-    } else {
-        statusHtml += `
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding-top: 8px; border-top: 1px dashed rgba(0,0,0,0.1);">
-                <div style="color: #475569;">📚 历史：${historyText}</div>
+            <div class="status-card-timer-row ${countdownClass}">
+                <span>⏱️ 本题限时 ${practiceTimeLimitSec}s</span>
+                <strong>剩余 ${countdown}</strong>
             </div>
         `;
     }
+
+    statusHtml += `<div class="status-card-history">📚 历史战绩：${historyText}</div>`;
 
     statusDiv.innerHTML = statusHtml;
 
@@ -1644,6 +1640,4 @@ function updateUI(answerResult) {
             statsDiv.innerHTML = '';
         }
     }
-
-    updateFloatingTimer(finalResult);
 }

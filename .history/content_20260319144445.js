@@ -745,11 +745,14 @@ function renderErrorBookSummary(summaryEl, allErrors) {
         );
         return wrapper;
     }));
+<<<<<<< HEAD
+=======
 
     const quickBadge = document.getElementById('quick-errors-badge');
     if (quickBadge) quickBadge.textContent = String(reviewing);
     const errorHint = document.getElementById('error-section-hint');
     if (errorHint) errorHint.textContent = `待复习 ${reviewing}`;
+>>>>>>> ui
 }
 
 function createErrorBookCard(err) {

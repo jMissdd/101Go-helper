@@ -6,22 +6,18 @@
   "web_accessible_resources": [
     {
       "resources": ["inject.js"],
-      "matches": [
-        "*://*.101weiqi.cn/*",
-        "*://*.101weiqi.com/*"
-      ]
+      "matches": ["*://*.101weiqi.cn/*"]
     }
   ],
   "content_scripts": [
     {
       "matches": [
         "*://www.101weiqi.cn/*",
-        "*://101weiqi.cn/*",
-        "*://www.101weiqi.com/*",
-        "*://101weiqi.com/*"
+        "*://101weiqi.cn/*"
       ],
       "css": ["style.css"],
       "js": ["content.js"]
     }
+
   ]
 }

@@ -245,28 +245,6 @@ function createPanel() {
                 <button id="btn-quick-search" class="quick-action-btn" type="button">搜索</button>
             </div>
 
-            <div id="practice-stats" class="helper-info-block practice-stats-card" style="display:none;"></div>
-
-            <div id="book-practice-area" class="panel-feature-card book-feature-card" style="display:none;">
-                <div class="feature-card-title">📘 棋书练习</div>
-                <div id="book-info" class="feature-card-meta"></div>
-                <div id="book-progress-bar" class="book-progress-wrap">
-                    <div class="book-progress-track">
-                        <div id="book-progress-fill" style="background:#8b5cf6; height:100%; width:0%; transition:width 0.3s;"></div>
-                    </div>
-                    <div id="book-progress-text" class="feature-card-meta feature-card-meta-tight"></div>
-                </div>
-                <div id="book-stats" class="feature-card-stats"></div>
-                <div class="feature-card-actions">
-                    <button id="btn-book-prev" class="helper-btn book-nav-btn feature-btn-secondary">⬅ 上一题</button>
-                    <button id="btn-book-next" class="helper-btn book-nav-btn feature-btn-primary">下一题 ➡</button>
-                </div>
-                <div class="feature-card-actions feature-card-actions-tight">
-                    <button id="btn-book-wrong-only" class="helper-btn book-nav-btn feature-btn-secondary">🔴 仅错题</button>
-                    <button id="btn-book-reset" class="helper-btn book-nav-btn feature-btn-danger">🔄 重置本章</button>
-                </div>
-            </div>
-
             <div class="panel-scroll-area">
             <section id="helper-mode-section" class="panel-section-card" data-section="settings">
                 <button id="btn-toggle-settings-section" class="panel-section-header" type="button">
@@ -290,6 +268,8 @@ function createPanel() {
                     </div>
                 </div>
             </section>
+
+            <div id="practice-stats" class="helper-info-block practice-stats-card" style="display:none; margin-top:8px;"></div>
 
             <section id="error-book-section" class="panel-section-card" data-section="error">
                 <button id="btn-show-errors" class="panel-section-header panel-section-header-warn" type="button">
@@ -320,6 +300,26 @@ function createPanel() {
                     </div>
                 </div>
             </section>
+
+            <div id="book-practice-area" class="panel-feature-card book-feature-card" style="display:none;">
+                <div class="feature-card-title">📘 棋书练习</div>
+                <div id="book-info" class="feature-card-meta"></div>
+                <div id="book-progress-bar" class="book-progress-wrap">
+                    <div class="book-progress-track">
+                        <div id="book-progress-fill" style="background:#8b5cf6; height:100%; width:0%; transition:width 0.3s;"></div>
+                    </div>
+                    <div id="book-progress-text" class="feature-card-meta feature-card-meta-tight"></div>
+                </div>
+                <div id="book-stats" class="feature-card-stats"></div>
+                <div class="feature-card-actions">
+                    <button id="btn-book-prev" class="helper-btn book-nav-btn feature-btn-secondary">⬅ 上一题</button>
+                    <button id="btn-book-next" class="helper-btn book-nav-btn feature-btn-primary">下一题 ➡</button>
+                </div>
+                <div class="feature-card-actions feature-card-actions-tight">
+                    <button id="btn-book-wrong-only" class="helper-btn book-nav-btn feature-btn-secondary">🔴 仅错题</button>
+                    <button id="btn-book-reset" class="helper-btn book-nav-btn feature-btn-danger">🔄 重置本章</button>
+                </div>
+            </div>
 
             <section id="book-search-section" class="panel-section-card" data-section="search">
                 <button id="btn-toggle-search-section" class="panel-section-header" type="button">
@@ -1644,6 +1644,4 @@ function updateUI(answerResult) {
             statsDiv.innerHTML = '';
         }
     }
-
-    updateFloatingTimer(finalResult);
 }

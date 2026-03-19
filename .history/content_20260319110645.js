@@ -1,4 +1,4 @@
-console.log("101围棋助手: Content Script 已加载");
+console.log("101围棋助手: Content Script 已加�?);
 
 // 1. 注入 inject.js
 var s = document.createElement('script');
@@ -129,7 +129,7 @@ function applyPanelState(panel, nextState) {
 
     const minimizeBtn = panel.querySelector('#btn-minimize-panel');
     if (minimizeBtn) {
-        minimizeBtn.textContent = state.minimized ? '▣' : '－';
+        minimizeBtn.textContent = state.minimized ? '�? : '�?;
         minimizeBtn.title = state.minimized ? '展开面板' : '最小化面板';
     }
 
@@ -196,19 +196,8 @@ function applySectionState(panel, nextState) {
 }
 
 // ==========================================
-// 2. 创建 UI 面板 (可拖动)
+// 2. 创建 UI 面板 (可拖�?
 // ==========================================
-function updatePanelScale() {
-    const p = document.getElementById('weiqi-helper-panel');
-    if (p) {
-        let baseWinW = 1200;
-        let scale = Math.min(1, window.innerWidth / baseWinW);
-        scale = Math.max(0.65, scale); // 最小缩放保持在一个合理值
-        p.style.zoom = scale;
-    }
-}
-window.addEventListener('resize', updatePanelScale);
-
 function createPanel() {
     const existingPanel = document.getElementById('weiqi-helper-panel');
     if (existingPanel) return existingPanel;
@@ -224,10 +213,10 @@ function createPanel() {
                 <span id="header-mode-badge" class="panel-mode-badge">浏览模式</span>
             </div>
             <div class="panel-toolbar">
-                <button class="toolbar-preset-btn" type="button" data-preset="small" title="紧凑尺寸">小</button>
-                <button class="toolbar-preset-btn" type="button" data-preset="medium" title="标准尺寸">中</button>
-                <button class="toolbar-preset-btn" type="button" data-preset="large" title="扩展尺寸">大</button>
-                <button id="btn-minimize-panel" class="toolbar-icon-btn" type="button" title="最小化面板">－</button>
+                <button class="toolbar-preset-btn" type="button" data-preset="small" title="紧凑尺寸">�?/button>
+                <button class="toolbar-preset-btn" type="button" data-preset="medium" title="标准尺寸">�?/button>
+                <button class="toolbar-preset-btn" type="button" data-preset="large" title="扩展尺寸">�?/button>
+                <button id="btn-minimize-panel" class="toolbar-icon-btn" type="button" title="最小化面板">�?/button>
                 <button class="close-btn toolbar-icon-btn" type="button" title="关闭面板">×</button>
             </div>
         </div>
@@ -239,38 +228,15 @@ function createPanel() {
             <div class="panel-quick-actions">
                 <button id="btn-quick-settings" class="quick-action-btn" type="button">设置</button>
                 <button id="btn-quick-errors" class="quick-action-btn quick-action-warn" type="button">
-                    <span>错题本</span>
+                    <span>错题�?/span>
                     <span id="quick-errors-badge" class="quick-action-badge">0</span>
                 </button>
                 <button id="btn-quick-search" class="quick-action-btn" type="button">搜索</button>
             </div>
 
-            <div id="practice-stats" class="helper-info-block practice-stats-card" style="display:none;"></div>
-
-            <div id="book-practice-area" class="panel-feature-card book-feature-card" style="display:none;">
-                <div class="feature-card-title">📘 棋书练习</div>
-                <div id="book-info" class="feature-card-meta"></div>
-                <div id="book-progress-bar" class="book-progress-wrap">
-                    <div class="book-progress-track">
-                        <div id="book-progress-fill" style="background:#8b5cf6; height:100%; width:0%; transition:width 0.3s;"></div>
-                    </div>
-                    <div id="book-progress-text" class="feature-card-meta feature-card-meta-tight"></div>
-                </div>
-                <div id="book-stats" class="feature-card-stats"></div>
-                <div class="feature-card-actions">
-                    <button id="btn-book-prev" class="helper-btn book-nav-btn feature-btn-secondary">⬅ 上一题</button>
-                    <button id="btn-book-next" class="helper-btn book-nav-btn feature-btn-primary">下一题 ➡</button>
-                </div>
-                <div class="feature-card-actions feature-card-actions-tight">
-                    <button id="btn-book-wrong-only" class="helper-btn book-nav-btn feature-btn-secondary">🔴 仅错题</button>
-                    <button id="btn-book-reset" class="helper-btn book-nav-btn feature-btn-danger">🔄 重置本章</button>
-                </div>
-            </div>
-
-            <div class="panel-scroll-area">
             <section id="helper-mode-section" class="panel-section-card" data-section="settings">
                 <button id="btn-toggle-settings-section" class="panel-section-header" type="button">
-                    <span>模式与限时</span>
+                    <span>模式与限�?/span>
                     <span id="settings-section-hint" class="panel-section-hint">当前配置</span>
                 </button>
                 <div class="panel-section-body">
@@ -284,23 +250,25 @@ function createPanel() {
                             </select>
                         </div>
                         <div class="panel-setting-row">
-                            <span class="panel-setting-label">限时(秒)</span>
+                            <span class="panel-setting-label">限时(�?</span>
                             <input id="helper-time-limit" type="number" min="5" step="5" class="panel-input panel-input-number" />
                         </div>
                     </div>
                 </div>
             </section>
 
+            <div id="practice-stats" class="helper-info-block practice-stats-card" style="display:none; margin-top:8px;"></div>
+
             <section id="error-book-section" class="panel-section-card" data-section="error">
                 <button id="btn-show-errors" class="panel-section-header panel-section-header-warn" type="button">
-                    <span>错题本重刷</span>
-                    <span id="error-section-hint" class="panel-section-hint">待复习 0</span>
+                    <span>错题本重�?/span>
+                    <span id="error-section-hint" class="panel-section-hint">待复�?0</span>
                 </button>
                 <div class="panel-section-body">
                     <div id="error-book-area" class="error-book-area">
                         <div class="error-book-header">
                             <div>
-                                <div class="error-book-title">错题本</div>
+                                <div class="error-book-title">错题�?/div>
                                 <div class="error-book-subtitle">仅做题模式下，错题重刷做对后会自动移出待复习列表</div>
                             </div>
                             <button id="btn-clear-errors" class="helper-btn error-clear-btn">清空</button>
@@ -309,44 +277,62 @@ function createPanel() {
                         <div id="error-book-summary" class="error-book-summary"></div>
 
                         <div class="error-book-toolbar">
-                            <button id="btn-error-filter-review" class="helper-btn error-filter-btn active">待复习</button>
+                            <button id="btn-error-filter-review" class="helper-btn error-filter-btn active">待复�?/button>
                             <button id="btn-error-filter-all" class="helper-btn error-filter-btn">全部</button>
-                            <button id="btn-error-filter-resolved" class="helper-btn error-filter-btn">已刷回</button>
+                            <button id="btn-error-filter-resolved" class="helper-btn error-filter-btn">已刷�?/button>
                         </div>
 
                         <ul id="error-list" class="error-book-list">
-                            <li class="error-book-empty">加载中...</li>
+                            <li class="error-book-empty">加载�?..</li>
                         </ul>
                     </div>
                 </div>
             </section>
+
+            <div id="book-practice-area" class="panel-feature-card book-feature-card" style="display:none;">
+                <div class="feature-card-title">📘 棋书练习</div>
+                <div id="book-info" class="feature-card-meta"></div>
+                <div id="book-progress-bar" class="book-progress-wrap">
+                    <div class="book-progress-track">
+                        <div id="book-progress-fill" style="background:#8b5cf6; height:100%; width:0%; transition:width 0.3s;"></div>
+                    </div>
+                    <div id="book-progress-text" class="feature-card-meta feature-card-meta-tight"></div>
+                </div>
+                <div id="book-stats" class="feature-card-stats"></div>
+                <div class="feature-card-actions">
+                    <button id="btn-book-prev" class="helper-btn book-nav-btn feature-btn-secondary">�?上一�?/button>
+                    <button id="btn-book-next" class="helper-btn book-nav-btn feature-btn-primary">下一�?�?/button>
+                </div>
+                <div class="feature-card-actions feature-card-actions-tight">
+                    <button id="btn-book-wrong-only" class="helper-btn book-nav-btn feature-btn-secondary">🔴 仅错�?/button>
+                    <button id="btn-book-reset" class="helper-btn book-nav-btn feature-btn-danger">🔄 重置本章</button>
+                </div>
+            </div>
 
             <section id="book-search-section" class="panel-section-card" data-section="search">
                 <button id="btn-toggle-search-section" class="panel-section-header" type="button">
                     <span>棋书搜索</span>
-                    <span class="panel-section-hint">367 本可搜</span>
+                    <span class="panel-section-hint">367 本可�?/span>
                 </button>
                 <div class="panel-section-body">
                     <div id="book-search-area" class="search-section-body">
                         <div class="search-input-row">
-                            <input id="book-search-input" type="text" placeholder="书名 / 作者 / 难度" class="panel-input search-input" />
+                            <input id="book-search-input" type="text" placeholder="书名 / 作�?/ 难度" class="panel-input search-input" />
                             <button id="btn-book-search" class="helper-btn search-btn">搜索</button>
                         </div>
                         <div id="book-search-status" class="search-status" style="display:none;"></div>
                         <ul id="book-search-results" class="search-results-list">
-                            <li class="search-empty">输入关键词搜索棋书...</li>
+                            <li class="search-empty">输入关键词搜索棋�?..</li>
                         </ul>
                     </div>
                 </div>
             </section>
-            </div>
         </div>
         <div id="weiqi-helper-resizer" title="拖拽调整尺寸"></div>
     `;
     document.body.appendChild(panel);
     applyPanelState(panel, panelState);
     applySectionState(panel, sectionState);
-    updatePanelScale();
 
     const header = panel.querySelector('#weiqi-helper-header');
     const resizer = panel.querySelector('#weiqi-helper-resizer');
@@ -474,7 +460,7 @@ function createPanel() {
     panel.querySelector('#btn-toggle-search-section').addEventListener('click', () => toggleSection('search'));
 
     panel.querySelector('#btn-clear-errors').addEventListener('click', () => {
-        if (confirm('确定要清空所有错题记录吗？')) {
+        if (confirm('确定要清空所有错题记录吗�?)) {
             clearErrorBook().then(() => renderErrorBook(currentErrorFilter));
         }
     });
@@ -508,13 +494,13 @@ function createPanel() {
         const keyword = bookSearchInput.value;
         if (!_bookListCache) {
             bookSearchStatus.style.display = 'block';
-            bookSearchStatus.textContent = '⏳ 首次加载棋书数据...';
+            bookSearchStatus.textContent = '�?首次加载棋书数据...';
             _bookListCache = await fetchBookList();
             if (_bookListCache.length > 0) {
-                bookSearchStatus.textContent = `✅ 已加载 ${_bookListCache.length} 本棋书`;
+                bookSearchStatus.textContent = `�?已加�?${_bookListCache.length} 本棋书`;
                 setTimeout(() => { bookSearchStatus.style.display = 'none'; }, 2000);
             } else {
-                bookSearchStatus.textContent = '❌ 加载失败，请检查网络后重试';
+                bookSearchStatus.textContent = '�?加载失败，请检查网络后重试';
             }
         }
         const results = searchBooks(_bookListCache, keyword);
@@ -534,12 +520,12 @@ function createPanel() {
         } else if (bookWrongOnly) {
             const wrongCount = bookProgress ? Object.values(bookProgress.doneMap).filter(d => d.status === 2).length : 0;
             if (wrongCount === 0) {
-                alert('当前章节还没有错题记录，先做几道题吧！');
+                alert('当前章节还没有错题记录，先做几道题吧�?);
             } else {
-                alert('仅错题模式：已是最后一道错题（共 ' + wrongCount + ' 题）');
+                alert('仅错题模式：已是最后一道错题（�?' + wrongCount + ' 题）');
             }
         } else {
-            alert('已是本章最后一题');
+            alert('已是本章最后一�?);
         }
     });
     panel.querySelector('#btn-book-prev').addEventListener('click', () => {
@@ -549,18 +535,18 @@ function createPanel() {
         } else if (bookWrongOnly) {
             const wrongCount = bookProgress ? Object.values(bookProgress.doneMap).filter(d => d.status === 2).length : 0;
             if (wrongCount === 0) {
-                alert('当前章节还没有错题记录，先做几道题吧！');
+                alert('当前章节还没有错题记录，先做几道题吧�?);
             } else {
-                alert('仅错题模式：已是第一道错题（共 ' + wrongCount + ' 题）');
+                alert('仅错题模式：已是第一道错题（�?' + wrongCount + ' 题）');
             }
         } else {
-            alert('已是本章第一题');
+            alert('已是本章第一�?);
         }
     });
     panel.querySelector('#btn-book-wrong-only').addEventListener('click', () => {
         bookWrongOnly = !bookWrongOnly;
         const btn = panel.querySelector('#btn-book-wrong-only');
-        btn.textContent = bookWrongOnly ? '📋 全部题目' : '🔴 仅错题';
+        btn.textContent = bookWrongOnly ? '📋 全部题目' : '🔴 仅错�?;
         btn.style.background = bookWrongOnly ? '#ef4444' : '';
         btn.style.color = bookWrongOnly ? 'white' : '';
         if (bookProgress) {
@@ -570,7 +556,7 @@ function createPanel() {
     });
     panel.querySelector('#btn-book-reset').addEventListener('click', () => {
         if (!bookContext) return;
-        if (!confirm(`确定重置「${bookContext.bookName || '本章'}」的做题进度吗？`)) return;
+        if (!confirm(`确定重置�?{bookContext.bookName || '本章'}」的做题进度吗？`)) return;
         bookProgress = {
             doneMap: {},
             stats: { total: bookChapterQs.length, done: 0, correct: 0, wrong: 0, timeoutWrong: 0, streak: 0 },
@@ -612,7 +598,7 @@ function createPanel() {
                 // 做题模式：收起搜索（做题时用不到），保留其他
                 applySectionState(panel, { ...sects, search: false });
             }
-            // browse 模式不自动调整，保持用户上一次的状态
+            // browse 模式不自动调整，保持用户上一次的状�?
         }
         updateUI(currentDisplayResult);
     });
@@ -639,13 +625,13 @@ function createPanel() {
     return panel;
 }
 
-// 初始化面板
+// 初始化面�?
 createPanel();
 
 function getCurrentPracticeStatsText() {
     const s = practiceSession.stats;
     const accuracy = s.total > 0 ? Math.round((s.correct / s.total) * 100) : 0;
-    return `📈 做题统计：总${s.total} | 对${s.correct} | 错${s.wrong}（超时${s.timeoutWrong}） | 正确率${accuracy}%`;
+    return `📈 做题统计：�?{s.total} | �?{s.correct} | �?{s.wrong}（超�?{s.timeoutWrong}�?| 正确�?{accuracy}%`;
 }
 
 // ==========================================
@@ -660,7 +646,7 @@ const TRUSTED_101_HOSTS = new Set([
     '101weiqi.cn',
 ]);
 
-// 根据当前域名返回正确的 101 基础 URL（同时兼容 .cn 和 .com）
+// 根据当前域名返回正确�?101 基础 URL（同时兼�?.cn �?.com�?
 function get101BaseUrl() {
     const host = window.location.hostname;
     return host.endsWith('.com') ? 'https://www.101weiqi.com' : 'https://www.101weiqi.cn';
@@ -682,7 +668,7 @@ function getDifficultyRank(levelname) {
 function groupErrorsByDifficulty(errors) {
     const groups = {};
     errors.forEach((item) => {
-        const key = item.levelname || '未标注难度';
+        const key = item.levelname || '未标注难�?;
         if (!groups[key]) groups[key] = [];
         groups[key].push(item);
     });
@@ -732,9 +718,9 @@ function renderErrorBookSummary(summaryEl, allErrors) {
     const reviewing = allErrors.filter(item => item.needReview !== false).length;
     const resolved = allErrors.filter(item => item.needReview === false).length;
     const cards = [
-        { label: '待复习', value: reviewing },
+        { label: '待复�?, value: reviewing },
         { label: '错题总数', value: allErrors.length },
-        { label: '已刷回', value: resolved },
+        { label: '已刷�?, value: resolved },
     ];
 
     summaryEl.replaceChildren(...cards.map(card => {
@@ -749,7 +735,7 @@ function renderErrorBookSummary(summaryEl, allErrors) {
     const quickBadge = document.getElementById('quick-errors-badge');
     if (quickBadge) quickBadge.textContent = String(reviewing);
     const errorHint = document.getElementById('error-section-hint');
-    if (errorHint) errorHint.textContent = `待复习 ${reviewing}`;
+    if (errorHint) errorHint.textContent = `待复�?${reviewing}`;
 }
 
 function createErrorBookCard(err) {
@@ -760,7 +746,7 @@ function createErrorBookCard(err) {
         hour: '2-digit',
         minute: '2-digit',
     });
-    const statusText = err.needReview === false ? '已刷回' : '待复习';
+    const statusText = err.needReview === false ? '已刷�? : '待复�?;
     const statusClass = err.needReview === false ? 'resolved' : 'reviewing';
 
     const card = createElement('div', 'error-card');
@@ -771,7 +757,7 @@ function createErrorBookCard(err) {
     const meta = createElement('div', 'error-card-meta');
     const stats = createElement('div', 'error-card-stats');
     const actions = createElement('div', 'error-card-actions');
-    const reviewBtn = createElement('button', 'helper-btn error-review-btn', '去重刷');
+    const reviewBtn = createElement('button', 'helper-btn error-review-btn', '去重�?);
 
     if (safeUrl) {
         titleLink.href = safeUrl;
@@ -783,7 +769,7 @@ function createErrorBookCard(err) {
         titleLink.addEventListener('click', (event) => event.preventDefault());
         titleLink.title = '链接无效';
         reviewBtn.disabled = true;
-        reviewBtn.title = '错题链接无效，无法跳转';
+        reviewBtn.title = '错题链接无效，无法跳�?;
     }
 
     meta.append(
@@ -792,8 +778,8 @@ function createErrorBookCard(err) {
     );
 
     stats.append(
-        createElement('span', 'ok', `对 ${err.correctCount || 0}`),
-        createElement('span', 'bad', `错 ${err.errorCount || 0}`),
+        createElement('span', 'ok', `�?${err.correctCount || 0}`),
+        createElement('span', 'bad', `�?${err.errorCount || 0}`),
         createElement('span', 'time', dateText)
     );
 
@@ -833,7 +819,7 @@ function initDB() {
         request.onupgradeneeded = (event) => {
             const db = event.target.result;
             if (!db.objectStoreNames.contains(STORE_NAME)) {
-                // 以题目 ID 为主键
+                // 以题�?ID 为主�?
                 const store = db.createObjectStore(STORE_NAME, { keyPath: 'qid' });
                 store.createIndex('timestamp', 'timestamp', { unique: false });
             }
@@ -900,14 +886,14 @@ async function saveProblemHistory(problemData, isCorrect = false, options = {}) 
             tx.onerror = () => reject(tx.error);
             tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
         });
-        console.log(`【历史记录】更新 Q-${qid}，对:${record.correctCount || 0} 错:${record.errorCount || 0} 待复习:${record.needReview !== false}`);
+        console.log(`【历史记录】更�?Q-${qid}，对:${record.correctCount || 0} �?${record.errorCount || 0} 待复�?${record.needReview !== false}`);
     } catch (e) {
         console.error("保存历史记录失败:", e);
     }
 }
 
 async function getProblemHistory(qid) {
-    if (!qid) return null; // 防御空 key 报错
+    if (!qid) return null; // 防御�?key 报错
     try {
         const db = await initDB();
         return new Promise((resolve) => {
@@ -937,7 +923,7 @@ async function getErrorBook() {
             request.onerror = () => reject(request.error);
         });
     } catch (e) {
-        console.error("读取错题本失败:", e);
+        console.error("读取错题本失�?", e);
         return [];
     }
 }
@@ -953,7 +939,7 @@ async function clearErrorBook() {
             request.onerror = () => reject(request.error);
         });
     } catch (e) {
-        console.error("清空错题本失败:", e);
+        console.error("清空错题本失�?", e);
     }
 }
 
@@ -968,7 +954,7 @@ function startErrorReview(qid, url) {
     localStorage.setItem(MODE_KEY, 'practice');
     const modeSelect = document.getElementById('helper-mode');
     if (modeSelect) modeSelect.value = 'practice';
-    console.log(`【错题重刷】开始重刷 Q-${qid}`);
+    console.log(`【错题重刷】开始重�?Q-${qid}`);
     window.location.href = safeUrl;
 }
 
@@ -978,7 +964,7 @@ async function renderErrorBook(filter = 'needReview') {
     if (!listEl) return;
 
     const renderToken = ++errorBookRenderToken;
-    listEl.replaceChildren(createErrorBookEmptyItem('加载中...'));
+    listEl.replaceChildren(createErrorBookEmptyItem('加载�?..'));
 
     const allErrors = await getErrorBook();
     if (renderToken !== errorBookRenderToken) return;
@@ -990,7 +976,7 @@ async function renderErrorBook(filter = 'needReview') {
 
     if (errors.length === 0) {
         if (renderToken !== errorBookRenderToken) return;
-        listEl.replaceChildren(createErrorBookEmptyItem('当前筛选下没有题目，继续保持。'));
+        listEl.replaceChildren(createErrorBookEmptyItem('当前筛选下没有题目，继续保持�?));
         return;
     }
 
@@ -1010,17 +996,17 @@ const BOOK_CACHE_TTL = 24 * 60 * 60 * 1000; // 24小时
 // ==========================================
 const BOOK_PROGRESS_PREFIX = 'book_progress:';
 
-// 棋书上下文（当前页面是否在棋书题目页）
+// 棋书上下文（当前页面是否在棋书题目页�?
 let bookContext = null;
 // 当前章节完整题序列（跨页合并后）
 let bookChapterQs = [];
 // 当前章节进度对象
 let bookProgress = null;
-// 错题筛选开关
+// 错题筛选开�?
 let bookWrongOnly = false;
 
 /**
- * 从 inject.js 传来的 bookContext 判断当前是否在棋书做题页
+ * �?inject.js 传来�?bookContext 判断当前是否在棋书做题页
  */
 function isOnBookQuestionPage() {
     return bookContext && bookContext.bookId && bookContext.chapterId && bookContext.qid;
@@ -1058,7 +1044,7 @@ function loadBookProgress(bookId, chapterId) {
 function saveBookProgress(bookId, chapterId, progress) {
     try {
         localStorage.setItem(getBookProgressKey(bookId, chapterId), JSON.stringify(progress));
-    } catch(e) { console.error('【棋书】保存进度失败:', e); }
+    } catch(e) { console.error('【棋书】保存进度失�?', e); }
 }
 
 /**
@@ -1070,7 +1056,7 @@ function recordBookResult(qid, status, reason) {
     if (bookProgress.doneMap[key]) return; // 已锁存不覆盖
 
     const entry = {
-        status: status, // 1=对, 2=错
+        status: status, // 1=�? 2=�?
         reason: reason, // 'result' | 'timeout'
         ts: Date.now(),
     };
@@ -1088,11 +1074,11 @@ function recordBookResult(qid, status, reason) {
     bookProgress.lastQid = key;
 
     saveBookProgress(bookContext.bookId, bookContext.chapterId, bookProgress);
-    console.log(`【棋书】Q-${qid} → ${status === 1 ? '对' : '错'}(${reason}), 完成${bookProgress.stats.done}/${bookProgress.stats.total}`);
+    console.log(`【棋书】Q-${qid} �?${status === 1 ? '�? : '�?}(${reason}), 完成${bookProgress.stats.done}/${bookProgress.stats.total}`);
 }
 
 /**
- * 抓取章节完整题序列（跨页合并）
+ * 抓取章节完整题序列（跨页合并�?
  * 利用 fetch 解析每页 HTML 中的 var nodedata = {...} 提取 qs
  */
 async function fetchChapterFullQs(bookId, chapterId) {
@@ -1102,7 +1088,7 @@ async function fetchChapterFullQs(bookId, chapterId) {
         if (cached) {
             const parsed = JSON.parse(cached);
             if (Date.now() - parsed.ts < BOOK_CACHE_TTL && Array.isArray(parsed.qs) && parsed.qs.length > 0) {
-                console.log(`【棋书】缓存命中 ${parsed.qs.length} 题`);
+                console.log(`【棋书】缓存命�?${parsed.qs.length} 题`);
                 return parsed.qs;
             }
         }
@@ -1110,7 +1096,7 @@ async function fetchChapterFullQs(bookId, chapterId) {
 
     let allQs = [];
     try {
-        // 先抓第1页获取 maxpage
+        // 先抓�?页获�?maxpage
         const url1 = `${get101BaseUrl()}/book/${bookId}/${chapterId}/?page=1`;
         const html1 = await fetch(url1).then(r => r.text());
         const nd1 = extractNodedata(html1);
@@ -1118,7 +1104,7 @@ async function fetchChapterFullQs(bookId, chapterId) {
         allQs = allQs.concat(nd1.qs);
         const maxpage = nd1.maxpage || 1;
 
-        // 并行抓取剩余页
+        // 并行抓取剩余�?
         if (maxpage > 1) {
             const promises = [];
             for (let p = 2; p <= maxpage; p++) {
@@ -1129,11 +1115,11 @@ async function fetchChapterFullQs(bookId, chapterId) {
             pages.forEach(nd => { if (nd) allQs = allQs.concat(nd.qs); });
         }
 
-        // 按 qindex 排序
+        // �?qindex 排序
         allQs.sort((a, b) => a.qindex - b.qindex);
 
         localStorage.setItem(cacheKey, JSON.stringify({ qs: allQs, ts: Date.now() }));
-        console.log(`【棋书】抓取完成 ${allQs.length} 题（${maxpage}页）`);
+        console.log(`【棋书】抓取完�?${allQs.length} 题（${maxpage}页）`);
     } catch(e) {
         console.error('【棋书】抓取章节题序列失败:', e);
     }
@@ -1141,7 +1127,7 @@ async function fetchChapterFullQs(bookId, chapterId) {
 }
 
 /**
- * 从 HTML 中提取 nodedata.pagedata 的 qs 和 maxpage
+ * �?HTML 中提�?nodedata.pagedata �?qs �?maxpage
  */
 function extractNodedata(html) {
     const match = html.match(/var\s+nodedata\s*=\s*(\{[\s\S]*?\});\s*(?:<\/script>|const |var |let )/);
@@ -1161,10 +1147,10 @@ function extractNodedata(html) {
 }
 
 /**
- * 找到下一题的 qid（按序 or 仅错题）
+ * 找到下一题的 qid（按�?or 仅错题）
  */
 /**
- * 获取 doneMap 中用于查找的 key（优先用 publicid，fallback 到 qid）
+ * 获取 doneMap 中用于查找的 key（优先用 publicid，fallback �?qid�?
  */
 function getBookQKey(q) {
     return String(q.publicid || q.qid);
@@ -1176,12 +1162,12 @@ function getNextBookQid() {
     const currentIdx = bookChapterQs.findIndex(q => q.qid === currentQid || q.publicid === currentQid);
 
     if (bookWrongOnly) {
-        // 仅错题模式：从 doneMap 中找 status===2 的题，key 与 recordBookResult 保持一致（publicid优先）
+        // 仅错题模式：�?doneMap 中找 status===2 的题，key �?recordBookResult 保持一致（publicid优先�?
         const wrongQs = bookChapterQs.filter(q => {
             const d = bookProgress && bookProgress.doneMap[getBookQKey(q)];
             return d && d.status === 2;
         });
-        if (wrongQs.length === 0) return null; // 无错题
+        if (wrongQs.length === 0) return null; // 无错�?
         // 从当前位置之后找下一个错题，找不到就从头循环
         const afterCurrent = wrongQs.filter(q => {
             const idx = bookChapterQs.findIndex(x => x.qid === q.qid || x.publicid === q.publicid);
@@ -1190,7 +1176,7 @@ function getNextBookQid() {
         const target = afterCurrent.length > 0 ? afterCurrent[0] : wrongQs[0];
         return target.qid || target.publicid;
     } else {
-        // 顺序模式：下一题
+        // 顺序模式：下一�?
         if (currentIdx < 0 || currentIdx >= bookChapterQs.length - 1) return null;
         const next = bookChapterQs[currentIdx + 1];
         return next.qid || next.publicid;
@@ -1198,7 +1184,7 @@ function getNextBookQid() {
 }
 
 /**
- * 找到上一题的 qid（支持 bookWrongOnly）
+ * 找到上一题的 qid（支�?bookWrongOnly�?
  */
 function getPrevBookQid() {
     if (!bookChapterQs.length || !bookContext) return null;
@@ -1206,7 +1192,7 @@ function getPrevBookQid() {
     const currentIdx = bookChapterQs.findIndex(q => q.qid === currentQid || q.publicid === currentQid);
 
     if (bookWrongOnly) {
-        // 仅错题模式：从当前位置之前找上一个错题，找不到就从末尾循环
+        // 仅错题模式：从当前位置之前找上一个错题，找不到就从末尾循�?
         const wrongQs = bookChapterQs.filter(q => {
             const d = bookProgress && bookProgress.doneMap[getBookQKey(q)];
             return d && d.status === 2;
@@ -1226,7 +1212,7 @@ function getPrevBookQid() {
 }
 
 /**
- * 跳转到一道棋书题目
+ * 跳转到一道棋书题�?
  */
 function goToBookQuestion(qid) {
     if (!bookContext) return;
@@ -1241,11 +1227,11 @@ function getBookStatsText() {
     const s = bookProgress.stats;
     const accuracy = s.done > 0 ? Math.round((s.correct / s.done) * 100) : 0;
     const total = s.total || bookChapterQs.length || '?';
-    let base = `📖 本章：${s.done}/${total} | 对${s.correct} 错${s.wrong}(超时${s.timeoutWrong}) | 连对${s.streak} | ${accuracy}%`;
+    let base = `📖 本章�?{s.done}/${total} | �?{s.correct} �?{s.wrong}(超时${s.timeoutWrong}) | 连对${s.streak} | ${accuracy}%`;
     if (bookWrongOnly) {
         // 计算当前 doneMap 中的错题数量
         const wrongCount = Object.values(bookProgress.doneMap).filter(d => d.status === 2).length;
-        base += `\n🔴 仅错题模式：共 ${wrongCount} 道错题待刷`;
+        base += `\n🔴 仅错题模式：�?${wrongCount} 道错题待刷`;
     }
     return base;
 }
@@ -1260,24 +1246,24 @@ function getCurrentBookIndex() {
 }
 
 /**
- * 初始化棋书练习：加载题序列 + 恢复进度
+ * 初始化棋书练习：加载题序�?+ 恢复进度
  */
 async function initBookPractice() {
     if (!isOnBookQuestionPage()) return;
 
     const statusEl = document.getElementById('book-info');
-    if (statusEl) statusEl.textContent = '⏳ 正在加载章节题目...';
+    if (statusEl) statusEl.textContent = '�?正在加载章节题目...';
 
-    // 显示棋书练习区
+    // 显示棋书练习�?
     const area = document.getElementById('book-practice-area');
-    if (area) area.style.display = 'block';
+    if (area) area.style.display = 'flex';
 
     // 如果已有 inject.js 传来的当前页 qs 作为初始数据
     if (bookContext.qs && bookContext.qs.length > 0 && bookChapterQs.length === 0) {
         bookChapterQs = bookContext.qs;
     }
 
-    // 异步抓取完整题序列
+    // 异步抓取完整题序�?
     const fullQs = await fetchChapterFullQs(bookContext.bookId, bookContext.chapterId);
     if (fullQs.length > 0) {
         bookChapterQs = fullQs;
@@ -1288,26 +1274,26 @@ async function initBookPractice() {
     bookProgress.stats.total = bookChapterQs.length;
     bookWrongOnly = bookProgress.wrongOnly || false;
 
-    // 恢复仅错题按钮状态
+    // 恢复仅错题按钮状�?
     const wrongBtn = document.getElementById('btn-book-wrong-only');
     if (wrongBtn) {
-        wrongBtn.textContent = bookWrongOnly ? '📋 全部题目' : '🔴 仅错题';
+        wrongBtn.textContent = bookWrongOnly ? '📋 全部题目' : '🔴 仅错�?;
         wrongBtn.style.background = bookWrongOnly ? '#ef4444' : '';
         wrongBtn.style.color = bookWrongOnly ? 'white' : '';
     }
 
-    // 确保当前题记入 practiceSession
+    // 确保当前题记�?practiceSession
     if (currentProblemId) {
         ensurePracticeState(currentProblemId, currentProblemData);
     }
 
     saveBookProgress(bookContext.bookId, bookContext.chapterId, bookProgress);
     updateUI(currentDisplayResult);
-    console.log(`【棋书】初始化完成: ${bookContext.bookName} / ${bookContext.chapterName}, ${bookChapterQs.length}题, 已完成${bookProgress.stats.done}`);
+    console.log(`【棋书】初始化完成: ${bookContext.bookName} / ${bookContext.chapterName}, ${bookChapterQs.length}�? 已完�?{bookProgress.stats.done}`);
 }
 
 async function fetchBookList() {
-    // 先检查 localStorage 缓存
+    // 先检�?localStorage 缓存
     try {
         const cached = localStorage.getItem(BOOK_CACHE_KEY);
         if (cached) {
@@ -1330,10 +1316,10 @@ async function fetchBookList() {
         }
         const books = JSON.parse(match[1]);
         localStorage.setItem(BOOK_CACHE_KEY, JSON.stringify({ data: books, timestamp: Date.now() }));
-        console.log(`【棋书】从服务器加载 ${books.length} 本棋书`);
+        console.log(`【棋书】从服务器加�?${books.length} 本棋书`);
         return books;
     } catch(e) {
-        console.error('【棋书】获取棋书列表失败:', e);
+        console.error('【棋书】获取棋书列表失�?', e);
         return [];
     }
 }
@@ -1354,12 +1340,12 @@ function renderBookSearchResults(results, keyword) {
     if (!listEl) return;
 
     if (!keyword || !keyword.trim()) {
-        listEl.innerHTML = '<li style="color: #999; padding: 6px 0;">输入关键词搜索棋书...</li>';
+        listEl.innerHTML = '<li style="color: #999; padding: 6px 0;">输入关键词搜索棋�?..</li>';
         return;
     }
 
     if (results.length === 0) {
-        listEl.innerHTML = `<li style="color: #999; padding: 6px 0;">未找到匹配"${keyword}"的棋书</li>`;
+        listEl.innerHTML = `<li style="color: #999; padding: 6px 0;">未找到匹�?${keyword}"的棋�?/li>`;
         return;
     }
 
@@ -1383,7 +1369,7 @@ function renderBookSearchResults(results, keyword) {
                 <span style="color:#666; font-size:11px; min-width:40px; text-align:right;">${b.levelname}</span>
             </div>
             <div style="font-size:11px; color:#999; margin-top:2px;">
-                ${b.qcount}题 · ${b.username}${descSnippet ? ' · ' + descSnippet : ''}
+                ${b.qcount}�?· ${b.username}${descSnippet ? ' · ' + descSnippet : ''}
             </div>
         `;
         listEl.appendChild(li);
@@ -1456,13 +1442,13 @@ window.addEventListener("message", async function(event) {
     currentProblemData = event.data.data;
     const answerResult = event.data.answerResult;
     const isNewResult = event.data.isNewResult;
-    console.log("【助手】来源:", event.data.source, "| 结果:", answerResult, "| 新结果:", isNewResult);
+    console.log("【助手】来�?", event.data.source, "| 结果:", answerResult, "| 新结�?", isNewResult);
 
-    // 更新棋书上下文
+    // 更新棋书上下�?
     if (event.data.bookContext) {
         bookContext = event.data.bookContext;
-        console.log("【棋书】上下文:", bookContext.bookName, '章节', bookContext.chapterId, '题', bookContext.qid);
-        // 自动初始化棋书练习（如果在棋书模式中）
+        console.log("【棋书】上下文:", bookContext.bookName, '章节', bookContext.chapterId, '�?, bookContext.qid);
+        // 自动初始化棋书练习（如果在棋书模式中�?
         if (helperMode === 'book' && isOnBookQuestionPage() && bookChapterQs.length === 0) {
             initBookPractice();
         }
@@ -1485,7 +1471,7 @@ window.addEventListener("message", async function(event) {
                 recordBookResult(currentProblemId, incomingResult, 'result');
             } else {
                 await checkPracticeTimeoutForCurrent();
-                // 超时也录入棋书进度
+                // 超时也录入棋书进�?
                 if (state.locked && state.status === 2) {
                     recordBookResult(currentProblemId, 2, 'timeout');
                 }
@@ -1518,7 +1504,7 @@ if (!practiceTimerHandle) {
     practiceTimerHandle = setInterval(async () => {
         if (helperMode === 'practice' || helperMode === 'book') {
             await checkPracticeTimeoutForCurrent();
-            // 棋书模式下超时也要录入棋书进度
+            // 棋书模式下超时也要录入棋书进�?
             if (helperMode === 'book' && currentProblemId) {
                 const state = practiceSession.byQid.get(String(currentProblemId));
                 if (state && state.locked && state.reason === 'timeout' && bookProgress) {
@@ -1533,28 +1519,6 @@ if (!practiceTimerHandle) {
 // ==========================================
 // 4. UI 更新函数
 // ==========================================
-function updateFloatingTimer(finalResult) {
-    let timerEl = document.getElementById('helper-floating-timer');
-    if (!timerEl) {
-        timerEl = document.createElement('div');
-        timerEl.id = 'helper-floating-timer';
-        timerEl.innerHTML = '<span class="time-label">剩余</span><span id="helper-floating-timer-val" class="time-value">--</span><span class="time-unit">s</span>';
-        document.body.appendChild(timerEl);
-    }
-    if ((helperMode === 'practice' || helperMode === 'book') && currentCountdownSec !== null && finalResult === 0) {
-        timerEl.style.display = 'flex';
-        const valEl = document.getElementById('helper-floating-timer-val');
-        if (valEl) valEl.textContent = Math.max(0, currentCountdownSec);
-        if (currentCountdownSec <= 10) {
-            timerEl.classList.add('warning');
-        } else {
-            timerEl.classList.remove('warning');
-        }
-    } else {
-        timerEl.style.display = 'none';
-    }
-}
-
 function updateUI(answerResult) {
     const statusDiv = document.getElementById('helper-status');
     if (!statusDiv || !currentProblemData) return;
@@ -1562,9 +1526,9 @@ function updateUI(answerResult) {
     const modeLabels = { browse: '👀 浏览模式', practice: '📝 做题模式', book: '📘 棋书练习' };
     const finalResult = (answerResult === null || answerResult === undefined) ? 0 : answerResult;
     const toneClass = finalResult === 1 ? 'is-success' : finalResult === 2 ? 'is-fail' : 'is-pending';
-    const resultText = finalResult === 1 ? '✅ 本题已通过' : finalResult === 2 ? '❌ 本题未通过' : '⏳ 尚未作答';
+    const resultText = finalResult === 1 ? '�?本题已通过' : finalResult === 2 ? '�?本题未通过' : '�?尚未作答';
     const historyText = currentProblemHistory
-        ? `${currentProblemHistory.correctCount || 0} 对 / ${currentProblemHistory.errorCount || 0} 错`
+        ? `${currentProblemHistory.correctCount || 0} �?/ ${currentProblemHistory.errorCount || 0} 错`
         : '初次挑战';
 
     statusDiv.className = `helper-info-block status-card ${toneClass}`;
@@ -1576,7 +1540,7 @@ function updateUI(answerResult) {
             </div>
             <div class="status-card-meta-row" style="margin-top: 0; gap: 4px;">
                 <span class="status-meta-pill" style="font-size:10px; padding:2px 6px;">Q-${currentProblemData.publicid || '?'}</span>
-                <span class="status-meta-pill" style="font-size:10px; padding:2px 6px;">${currentProblemData.levelname || '未知'}</span>
+                <span class="status-meta-pill" style="font-size:10px; padding:2px 6px;">${currentProblemData.levelname || '??'}</span>
             </div>
         </div>
     `;
@@ -1587,16 +1551,16 @@ function updateUI(answerResult) {
         statusHtml += `
             <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding-top: 8px; border-top: 1px dashed rgba(0,0,0,0.1);">
                 <div style="${countdownClass}">
-                    <span>⏳ 测验: ${practiceTimeLimitSec}s</span>
-                    <strong style="margin-left:4px;">剩 ${countdown}</strong>
+                    <span>? ??: ${practiceTimeLimitSec}s</span>
+                    <strong style="margin-left:4px;">? ${countdown}</strong>
                 </div>
-                <div style="color: #475569;">📚 历史：${historyText}</div>
+                <div style="color: #475569;">?? ???${historyText}</div>
             </div>
         `;
     } else {
         statusHtml += `
             <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding-top: 8px; border-top: 1px dashed rgba(0,0,0,0.1);">
-                <div style="color: #475569;">📚 历史：${historyText}</div>
+                <div style="color: #475569;">?? ???${historyText}</div>
             </div>
         `;
     }
@@ -1608,11 +1572,11 @@ function updateUI(answerResult) {
     const settingsHint = document.getElementById('settings-section-hint');
     if (settingsHint) settingsHint.textContent = `${modeLabels[helperMode] || helperMode} · ${practiceTimeLimitSec}s`;
 
-    // 棋书练习区渲染
+    // 棋书练习区渲�?
     const bookArea = document.getElementById('book-practice-area');
     if (bookArea) {
         if (helperMode === 'book' && isOnBookQuestionPage()) {
-            bookArea.style.display = 'block';
+            bookArea.style.display = 'flex';
             const infoEl = document.getElementById('book-info');
             const statsEl = document.getElementById('book-stats');
             const progressFill = document.getElementById('book-progress-fill');
@@ -1620,13 +1584,13 @@ function updateUI(answerResult) {
 
             if (infoEl && bookContext) {
                 const pos = getCurrentBookIndex();
-                infoEl.textContent = `📘 ${bookContext.bookName || '棋书'} / ${bookContext.chapterName || '章节'} — 第${pos.current}/${pos.total}题`;
+                infoEl.textContent = `📘 ${bookContext.bookName || '棋书'} / ${bookContext.chapterName || '章节'} �?�?{pos.current}/${pos.total}题`;
             }
             if (statsEl) statsEl.textContent = getBookStatsText();
             if (progressFill && progressText && bookProgress) {
                 const pct = bookProgress.stats.total > 0 ? Math.round((bookProgress.stats.done / bookProgress.stats.total) * 100) : 0;
                 progressFill.style.width = pct + '%';
-                progressText.textContent = `进度 ${pct}%（${bookProgress.stats.done}/${bookProgress.stats.total}）`;
+                progressText.textContent = `进度 ${pct}%�?{bookProgress.stats.done}/${bookProgress.stats.total}）`;
             }
         } else {
             bookArea.style.display = 'none';
@@ -1636,7 +1600,7 @@ function updateUI(answerResult) {
     const statsDiv = document.getElementById('practice-stats');
     if (statsDiv) {
         if (helperMode === 'practice') {
-            statsDiv.style.display = 'block';
+            statsDiv.style.display = 'flex';
             statsDiv.className = 'helper-info-block practice-stats-card';
             statsDiv.innerHTML = getCurrentPracticeStatsText();
         } else {
@@ -1644,6 +1608,4 @@ function updateUI(answerResult) {
             statsDiv.innerHTML = '';
         }
     }
-
-    updateFloatingTimer(finalResult);
 }

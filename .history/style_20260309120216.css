@@ -1,0 +1,373 @@
+/* 悬浮面板样式 */
+#weiqi-helper-panel {
+    position: fixed;
+    top: 60px;
+    right: 20px;
+    width: 320px;
+    max-width: calc(100vw - 24px);
+    background-color: #fff;
+    border: 1px solid #ddd;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    z-index: 9999;
+    border-radius: 8px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    color: #333;
+    transition: transform 0.3s ease;
+}
+
+#weiqi-helper-header {
+    background-color: #3b82f6; /* 蓝色表头 */
+    color: white;
+    padding: 10px 15px;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: move; /* 可拖动暗示 */
+}
+
+#weiqi-helper-header .close-btn {
+    cursor: pointer;
+    font-size: 18px;
+    margin-left: 10px;
+}
+
+#weiqi-helper-content {
+    padding: 15px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.helper-btn {
+    display: block;
+    width: 100%;
+    padding: 8px 0;
+    margin-bottom: 10px;
+    background-color: #f3f4f6;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    cursor: pointer;
+    text-align: center;
+    transition: background-color 0.2s;
+}
+
+.helper-btn:hover {
+    background-color: #e5e7eb;
+}
+
+.helper-btn.primary {
+    background-color: #10b981;
+    color: white;
+    border-color: #059669;
+}
+.helper-btn.primary:hover {
+    background-color: #059669;
+}
+
+.helper-info-block {
+    background-color: #f9fafb;
+    padding: 10px;
+    border-radius: 4px;
+    border: 1px dashed #ccc;
+    margin-top: 10px;
+    font-size: 12px;
+    color: #666;
+    word-break: break-all;
+}
+
+.status-tag {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    margin-right: 5px;
+}
+.tag-success { background-color: #d1fae5; color: #065f46; }
+.tag-wait { background-color: #fffbeb; color: #92400e; }
+
+/* 棋书搜索结果 */
+.book-result-item {
+    padding: 6px 0;
+    border-bottom: 1px dashed #eee;
+    transition: background-color 0.15s;
+}
+.book-result-item:hover {
+    background-color: #f0f7ff;
+}
+#book-search-input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+/* 棋书练习模式 */
+.book-nav-btn {
+    transition: background-color 0.15s, transform 0.1s;
+}
+.book-nav-btn:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+}
+.book-nav-btn:active {
+    transform: translateY(0);
+}
+#book-practice-area {
+    animation: bookFadeIn 0.25s ease;
+}
+@keyframes bookFadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+#book-progress-fill {
+    transition: width 0.3s ease;
+}
+
+/* 错题本 */
+.error-book-area {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #e5e7eb;
+}
+
+.error-book-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.error-book-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #111827;
+}
+
+.error-book-subtitle {
+    margin-top: 2px;
+    font-size: 11px;
+    color: #6b7280;
+    line-height: 1.4;
+}
+
+.error-clear-btn {
+    width: auto;
+    margin: 0;
+    padding: 6px 10px;
+    font-size: 11px;
+    background: #fff7ed;
+    border-color: #fdba74;
+    color: #c2410c;
+}
+
+.error-book-summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.error-book-summary-card {
+    padding: 8px;
+    border-radius: 8px;
+    background: linear-gradient(180deg, #fff7ed 0%, #fffbeb 100%);
+    border: 1px solid #fed7aa;
+    text-align: center;
+}
+
+.error-book-summary-number {
+    font-size: 18px;
+    font-weight: 700;
+    color: #9a3412;
+    line-height: 1.1;
+}
+
+.error-book-summary-label {
+    margin-top: 4px;
+    font-size: 11px;
+    color: #7c2d12;
+}
+
+.error-book-toolbar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.error-filter-btn {
+    margin: 0;
+    padding: 6px 8px;
+    font-size: 11px;
+    flex: 1;
+}
+
+.error-filter-btn.active {
+    background: #2563eb;
+    border-color: #1d4ed8;
+    color: #fff;
+}
+
+.error-book-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.error-book-empty {
+    padding: 16px 10px;
+    text-align: center;
+    color: #6b7280;
+    background: #f9fafb;
+    border: 1px dashed #d1d5db;
+    border-radius: 8px;
+}
+
+.error-group {
+    margin-bottom: 12px;
+}
+
+.error-group-details {
+    border-radius: 10px;
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    overflow: hidden;
+}
+
+.error-group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    padding: 10px 12px;
+    list-style: none;
+    font-size: 12px;
+    font-weight: 700;
+    color: #1f2937;
+    background: #f3f4f6;
+}
+
+.error-group-header::-webkit-details-marker {
+    display: none;
+}
+
+.error-group-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #1f2937;
+}
+
+.error-group-count {
+    font-size: 11px;
+    color: #6b7280;
+}
+
+.error-group-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+}
+
+.error-card {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 10px;
+    border-radius: 10px;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.error-card-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.error-card-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.error-card-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #1d4ed8;
+    text-decoration: none;
+}
+
+.error-card-title:hover {
+    text-decoration: underline;
+}
+
+.error-card-badge {
+    flex-shrink: 0;
+    padding: 2px 6px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.error-card-badge.reviewing {
+    background: #fff7ed;
+    color: #c2410c;
+}
+
+.error-card-badge.resolved {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.error-card-meta {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 5px;
+    font-size: 11px;
+    color: #6b7280;
+}
+
+.error-card-stats {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+    font-size: 11px;
+}
+
+.error-card-stats .ok {
+    color: #059669;
+}
+
+.error-card-stats .bad {
+    color: #dc2626;
+    font-weight: 700;
+}
+
+.error-card-stats .time {
+    color: #9ca3af;
+}
+
+.error-card-actions {
+    flex-shrink: 0;
+    width: 72px;
+}
+
+.error-review-btn {
+    margin: 0;
+    padding: 6px 8px;
+    font-size: 11px;
+    background: #eff6ff;
+    border-color: #93c5fd;
+    color: #1d4ed8;
+}
+
+.error-review-btn:hover {
+    background: #dbeafe;
+}
