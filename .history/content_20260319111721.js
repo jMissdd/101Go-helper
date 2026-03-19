@@ -1576,7 +1576,7 @@ function updateUI(answerResult) {
     const bookArea = document.getElementById('book-practice-area');
     if (bookArea) {
         if (helperMode === 'book' && isOnBookQuestionPage()) {
-            bookArea.style.display = 'block';
+            bookArea.style.display = 'flex';
             const infoEl = document.getElementById('book-info');
             const statsEl = document.getElementById('book-stats');
             const progressFill = document.getElementById('book-progress-fill');
@@ -1600,7 +1600,7 @@ function updateUI(answerResult) {
     const statsDiv = document.getElementById('practice-stats');
     if (statsDiv) {
         if (helperMode === 'practice') {
-            statsDiv.style.display = 'block';
+            statsDiv.style.display = 'flex';
             statsDiv.className = 'helper-info-block practice-stats-card';
             statsDiv.innerHTML = getCurrentPracticeStatsText();
         } else {

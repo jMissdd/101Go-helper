@@ -1256,7 +1256,7 @@ async function initBookPractice() {
 
     // 显示棋书练习区
     const area = document.getElementById('book-practice-area');
-    if (area) area.style.display = 'block';
+    if (area) area.style.display = 'flex';
 
     // 如果已有 inject.js 传来的当前页 qs 作为初始数据
     if (bookContext.qs && bookContext.qs.length > 0 && bookChapterQs.length === 0) {
@@ -1576,7 +1576,7 @@ function updateUI(answerResult) {
     const bookArea = document.getElementById('book-practice-area');
     if (bookArea) {
         if (helperMode === 'book' && isOnBookQuestionPage()) {
-            bookArea.style.display = 'block';
+            bookArea.style.display = 'flex';
             const infoEl = document.getElementById('book-info');
             const statsEl = document.getElementById('book-stats');
             const progressFill = document.getElementById('book-progress-fill');
@@ -1600,7 +1600,7 @@ function updateUI(answerResult) {
     const statsDiv = document.getElementById('practice-stats');
     if (statsDiv) {
         if (helperMode === 'practice') {
-            statsDiv.style.display = 'block';
+            statsDiv.style.display = 'flex';
             statsDiv.className = 'helper-info-block practice-stats-card';
             statsDiv.innerHTML = getCurrentPracticeStatsText();
         } else {

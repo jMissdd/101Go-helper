@@ -617,8 +617,8 @@
 .status-card {
     border: none;
     margin-top: 0;
-    padding: 10px 12px;
-    border-radius: 12px;
+    padding: 14px;
+    border-radius: 18px;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.96));
     box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
     color: #334155;

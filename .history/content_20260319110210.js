@@ -1534,36 +1534,30 @@ function updateUI(answerResult) {
     statusDiv.className = `helper-info-block status-card ${toneClass}`;
 
     let statusHtml = `
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <div style="font-size: 16px; font-weight: 900; color: #0f172a; display: flex; align-items: center; gap: 6px;">
-                <span>${resultText}</span>
-            </div>
-            <div class="status-card-meta-row" style="margin-top: 0; gap: 4px;">
-                <span class="status-meta-pill" style="font-size:10px; padding:2px 6px;">Q-${currentProblemData.publicid || '?'}</span>
-                <span class="status-meta-pill" style="font-size:10px; padding:2px 6px;">${currentProblemData.levelname || '未知'}</span>
-            </div>
+        <div class="status-card-head">
+            <span class="status-tag tag-success">数据捕获成功</span>
+            <span class="status-mode-pill">${modeLabels[helperMode] || helperMode}</span>
+        </div>
+        <div class="status-card-main">${resultText}</div>
+        <div class="status-card-meta-row">
+            <span class="status-meta-pill">题目 Q-${currentProblemData.publicid || '?'}</span>
+            <span class="status-meta-pill">${currentProblemData.levelname || '未知难度'}</span>
+            <span class="status-meta-pill">${currentProblemData.qtypename || '未知题型'}</span>
         </div>
     `;
 
     if (helperMode === 'practice' || helperMode === 'book') {
         const countdown = (currentCountdownSec === null) ? '--:--' : formatCountdown(currentCountdownSec);
-        const countdownClass = (currentCountdownSec !== null && currentCountdownSec <= 10) ? 'color: #b91c1c; font-weight:bold;' : 'color: #0f172a;';
+        const countdownClass = (currentCountdownSec !== null && currentCountdownSec <= 10) ? 'is-warning' : '';
         statusHtml += `
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding-top: 8px; border-top: 1px dashed rgba(0,0,0,0.1);">
-                <div style="${countdownClass}">
-                    <span>⏳ 测验: ${practiceTimeLimitSec}s</span>
-                    <strong style="margin-left:4px;">剩 ${countdown}</strong>
-                </div>
-                <div style="color: #475569;">📚 历史：${historyText}</div>
-            </div>
-        `;
-    } else {
-        statusHtml += `
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding-top: 8px; border-top: 1px dashed rgba(0,0,0,0.1);">
-                <div style="color: #475569;">📚 历史：${historyText}</div>
+            <div class="status-card-timer-row ${countdownClass}">
+                <span>⏱️ 本题限时 ${practiceTimeLimitSec}s</span>
+                <strong>剩余 ${countdown}</strong>
             </div>
         `;
     }
+
+    statusHtml += `<div class="status-card-history">📚 历史战绩：${historyText}</div>`;
 
     statusDiv.innerHTML = statusHtml;
 

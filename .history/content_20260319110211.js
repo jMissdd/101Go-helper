@@ -1256,7 +1256,7 @@ async function initBookPractice() {
 
     // 显示棋书练习区
     const area = document.getElementById('book-practice-area');
-    if (area) area.style.display = 'block';
+    if (area) area.style.display = 'flex';
 
     // 如果已有 inject.js 传来的当前页 qs 作为初始数据
     if (bookContext.qs && bookContext.qs.length > 0 && bookChapterQs.length === 0) {
@@ -1534,36 +1534,30 @@ function updateUI(answerResult) {
     statusDiv.className = `helper-info-block status-card ${toneClass}`;
 
     let statusHtml = `
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <div style="font-size: 16px; font-weight: 900; color: #0f172a; display: flex; align-items: center; gap: 6px;">
-                <span>${resultText}</span>
-            </div>
-            <div class="status-card-meta-row" style="margin-top: 0; gap: 4px;">
-                <span class="status-meta-pill" style="font-size:10px; padding:2px 6px;">Q-${currentProblemData.publicid || '?'}</span>
-                <span class="status-meta-pill" style="font-size:10px; padding:2px 6px;">${currentProblemData.levelname || '未知'}</span>
-            </div>
+        <div class="status-card-head">
+            <span class="status-tag tag-success">数据捕获成功</span>
+            <span class="status-mode-pill">${modeLabels[helperMode] || helperMode}</span>
+        </div>
+        <div class="status-card-main">${resultText}</div>
+        <div class="status-card-meta-row">
+            <span class="status-meta-pill">题目 Q-${currentProblemData.publicid || '?'}</span>
+            <span class="status-meta-pill">${currentProblemData.levelname || '未知难度'}</span>
+            <span class="status-meta-pill">${currentProblemData.qtypename || '未知题型'}</span>
         </div>
     `;
 
     if (helperMode === 'practice' || helperMode === 'book') {
         const countdown = (currentCountdownSec === null) ? '--:--' : formatCountdown(currentCountdownSec);
-        const countdownClass = (currentCountdownSec !== null && currentCountdownSec <= 10) ? 'color: #b91c1c; font-weight:bold;' : 'color: #0f172a;';
+        const countdownClass = (currentCountdownSec !== null && currentCountdownSec <= 10) ? 'is-warning' : '';
         statusHtml += `
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding-top: 8px; border-top: 1px dashed rgba(0,0,0,0.1);">
-                <div style="${countdownClass}">
-                    <span>⏳ 测验: ${practiceTimeLimitSec}s</span>
-                    <strong style="margin-left:4px;">剩 ${countdown}</strong>
-                </div>
-                <div style="color: #475569;">📚 历史：${historyText}</div>
-            </div>
-        `;
-    } else {
-        statusHtml += `
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding-top: 8px; border-top: 1px dashed rgba(0,0,0,0.1);">
-                <div style="color: #475569;">📚 历史：${historyText}</div>
+            <div class="status-card-timer-row ${countdownClass}">
+                <span>⏱️ 本题限时 ${practiceTimeLimitSec}s</span>
+                <strong>剩余 ${countdown}</strong>
             </div>
         `;
     }
+
+    statusHtml += `<div class="status-card-history">📚 历史战绩：${historyText}</div>`;
 
     statusDiv.innerHTML = statusHtml;
 
@@ -1576,7 +1570,7 @@ function updateUI(answerResult) {
     const bookArea = document.getElementById('book-practice-area');
     if (bookArea) {
         if (helperMode === 'book' && isOnBookQuestionPage()) {
-            bookArea.style.display = 'block';
+            bookArea.style.display = 'flex';
             const infoEl = document.getElementById('book-info');
             const statsEl = document.getElementById('book-stats');
             const progressFill = document.getElementById('book-progress-fill');
@@ -1600,7 +1594,7 @@ function updateUI(answerResult) {
     const statsDiv = document.getElementById('practice-stats');
     if (statsDiv) {
         if (helperMode === 'practice') {
-            statsDiv.style.display = 'block';
+            statsDiv.style.display = 'flex';
             statsDiv.className = 'helper-info-block practice-stats-card';
             statsDiv.innerHTML = getCurrentPracticeStatsText();
         } else {
